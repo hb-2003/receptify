@@ -19,7 +19,7 @@ import { BillingPlan } from './entities/BillingPlan';
 import { Subscription } from './entities/Subscription';
 import { UsageLog } from './entities/UsageLog';
 
-export const AppDataSource = new DataSource({
+const AppDataSource = new DataSource({
   type: 'postgres',
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '5432', 10),
@@ -43,4 +43,5 @@ export async function getDB(): Promise<DataSource> {
   return initPromise;
 }
 
+// TypeORM CLI requires exactly one DataSource export. We expose ONLY the default.
 export default AppDataSource;

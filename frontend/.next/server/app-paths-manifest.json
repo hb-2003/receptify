@@ -1,22 +1,12 @@
 {
+  "/api/health/route": "app/api/health/route.js",
   "/api/auth/login/route": "app/api/auth/login/route.js",
-  "/api/auth/me/route": "app/api/auth/me/route.js",
   "/api/customers/route": "app/api/customers/route.js",
-  "/api/templates/route": "app/api/templates/route.js",
   "/api/analytics/route": "app/api/analytics/route.js",
-  "/api/scripts/generate/route": "app/api/scripts/generate/route.js",
-  "/api/auth/logout/route": "app/api/auth/logout/route.js",
-  "/api/calls/route": "app/api/calls/route.js",
+  "/page": "app/page.js",
   "/login/page": "app/login/page.js",
   "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
-  "/(app)/customers/page": "app/(app)/customers/page.js",
-  "/(app)/templates/page": "app/(app)/templates/page.js",
-  "/(app)/compliance/page": "app/(app)/compliance/page.js",
-  "/(app)/billing/page": "app/(app)/billing/page.js",
   "/(app)/scripts/page": "app/(app)/scripts/page.js",
   "/(app)/campaigns/new/page": "app/(app)/campaigns/new/page.js",
-  "/(app)/analytics/page": "app/(app)/analytics/page.js",
-  "/(app)/settings/page": "app/(app)/settings/page.js",
-  "/(app)/help/page": "app/(app)/help/page.js",
-  "/(app)/calls/page": "app/(app)/calls/page.js"
+  "/(app)/analytics/page": "app/(app)/analytics/page.js"
 }
