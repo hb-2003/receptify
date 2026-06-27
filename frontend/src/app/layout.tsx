@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans } from 'next/font/google';
+import { Plus_Jakarta_Sans, Bebas_Neue, JetBrains_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import './globals.css';
 
@@ -8,17 +8,28 @@ const jakarta = Plus_Jakarta_Sans({
   variable: '--font-jakarta',
   display: 'swap',
 });
+const bebas = Bebas_Neue({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-bebas',
+  display: 'swap',
+});
+const jbm = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-jbm',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
-  title: 'Receptify — AI Voice Receptionist, Answer Every Call',
+  title: 'Receptify — AI Voice Receptionist for Indian Businesses',
   description:
-    'Receptify helps Indian businesses run professional, compliance-aware AI calling campaigns — payment reminders, appointment reminders, lead follow-ups and more.',
+    'Upload your customer list, generate a script, and let Receptify’s AI voice agent handle the calls — with every outcome tracked in real time. Built for Indian SMEs.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={jakarta.variable}>
-      <body className="font-sans antialiased">
+    <html lang="en" className={`${jakarta.variable} ${bebas.variable} ${jbm.variable}`}>
+      <body className="font-sans antialiased bg-white">
         {children}
         <Toaster
           richColors

@@ -1,18 +1,33 @@
 import { cn } from '@/lib/utils';
-import { PhoneCall } from 'lucide-react';
 
-export function Logo({ className, showText = true, variant = 'default' }: { className?: string; showText?: boolean; variant?: 'default' | 'white' }) {
+export function Logo({ className, variant = 'default', showText = true }: { className?: string; variant?: 'default' | 'white'; showText?: boolean }) {
+  const isWhite = variant === 'white';
   return (
     <div className={cn('flex items-center gap-2.5', className)} data-testid="receptify-logo">
-      <div className="relative w-9 h-9 rounded-xl bg-brand-gradient flex items-center justify-center shadow-glow">
-        <PhoneCall className="w-5 h-5 text-white" strokeWidth={2.5} />
-        <div className="absolute -right-1 -top-1 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-white" />
-      </div>
+      {/* SVG signal/phone mark */}
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="url(#receptify-grad)" />
+        <path
+          d="M11.5 9.5C11.5 8.67 12.17 8 13 8h2.2c.66 0 1.24.43 1.43 1.06l1.06 3.55c.16.53-.04 1.1-.48 1.43l-1.4 1.04c.86 1.66 2.22 3.02 3.88 3.88l1.04-1.4c.33-.44.9-.64 1.43-.48l3.55 1.06c.63.19 1.06.77 1.06 1.43V22c0 .83-.67 1.5-1.5 1.5C14.6 23.5 8.5 17.4 8.5 10.5c0-.55.45-1 1-1z"
+          fill="white"
+        />
+        <circle cx="23.5" cy="9" r="3" fill="#10B981" stroke="white" strokeWidth="1.5" />
+        <defs>
+          <linearGradient id="receptify-grad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#2563EB" />
+            <stop offset="1" stopColor="#1D4ED8" />
+          </linearGradient>
+        </defs>
+      </svg>
       {showText && (
-        <div className="flex flex-col leading-none">
-          <span className={cn('font-extrabold tracking-tight text-lg', variant === 'white' ? 'text-white' : 'text-brand-navy')}>RECEPTIFY</span>
-          <span className={cn('text-[10px] font-medium tracking-wide mt-0.5', variant === 'white' ? 'text-white/70' : 'text-slate-500')}>AI VOICE RECEPTIONIST</span>
-        </div>
+        <span
+          className={cn(
+            'logo-mark text-[22px] leading-none',
+            isWhite ? 'text-white' : 'text-brand-navy',
+          )}
+        >
+          RECEPTIFY
+        </span>
       )}
     </div>
   );

@@ -1,223 +1,212 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import {
   PhoneCall, Sparkles, Upload, Calendar, BarChart3, Megaphone, ShieldCheck,
-  Building2, HeartPulse, Home, Dumbbell, ShoppingBag, Wrench, GraduationCap, Landmark,
+  Landmark, HeartPulse, Home, Dumbbell, ShoppingBag, GraduationCap, Wrench,
   CheckCircle2, ArrowRight, Mic, FileSpreadsheet, Languages, FileText, ChevronDown,
-  Wallet, RefreshCw, Bell, MessageSquareHeart, PackageCheck, IndianRupee,
+  Wallet, RefreshCw, Bell, MessageSquareHeart, PackageCheck,
+  Clock, TrendingDown, UserX, Play, Star, Bot, Tag, BarChart, Headphones,
+  CalendarClock, ArrowUpRight, LayoutDashboard, History, FileStack, Search,
 } from 'lucide-react';
 import { Logo } from '@/components/ui/Logo';
+import LandingDashboardPreview from '@/components/landing/DashboardPreview';
 
-const NAV_LINKS = [
+const NAV = [
   { label: 'Features', href: '#features' },
-  { label: 'Use cases', href: '#use-cases' },
-  { label: 'How it works', href: '#how-it-works' },
+  { label: 'Use Cases', href: '#use-cases' },
   { label: 'Pricing', href: '#pricing' },
-  { label: 'FAQ', href: '#faq' },
+  { label: 'Compliance', href: '#compliance' },
 ];
 
 export default function LandingPage() {
   return (
     <main className="bg-marketing min-h-screen" data-testid="landing-page">
-      {/* NAV */}
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-white/60 border-b border-white/40">
-        <div className="container-max flex items-center justify-between px-6 py-4">
-          <Link href="/"><Logo /></Link>
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-700">
-            {NAV_LINKS.map((l) => (
-              <a key={l.href} href={l.href} className="hover:text-brand-600 transition-colors" data-testid={`nav-link-${l.label.toLowerCase().replace(/\s/g, '-')}`}>
+      {/* NAVBAR */}
+      <header className="sticky top-0 z-50 bg-white border-b border-line">
+        <div className="container-max flex items-center justify-between px-6 h-16">
+          <Link href="/" aria-label="Receptify home"><Logo /></Link>
+          <nav className="hidden md:flex items-center gap-8">
+            {NAV.map((l) => (
+              <a key={l.href} href={l.href} className="text-sm font-medium text-ink-muted hover:text-ink transition-colors" data-testid={`nav-link-${l.label.toLowerCase().replace(/\s/g, '-')}`}>
                 {l.label}
               </a>
             ))}
           </nav>
-          <div className="flex items-center gap-2">
-            <Link href="/login" className="btn-ghost text-sm" data-testid="nav-login">Sign in</Link>
-            <Link href="/signup" className="btn-primary text-sm py-2.5" data-testid="nav-signup">Start free trial</Link>
+          <div className="flex items-center gap-1.5">
+            <Link href="/login" className="btn-ghost" data-testid="nav-login">Log in</Link>
+            <Link href="/signup" className="btn-primary" data-testid="nav-signup">Start Free Trial</Link>
           </div>
         </div>
       </header>
 
       {/* HERO */}
-      <section className="relative section-padding overflow-hidden">
-        <div className="glow-orb w-[480px] h-[480px] -top-32 -left-20 bg-brand-100" />
-        <div className="glow-orb w-[460px] h-[460px] -bottom-24 -right-10 bg-brand-50" />
-
-        <div className="container-max relative grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          <div className="lg:col-span-7 animate-fade-up">
-            <span className="overline" data-testid="hero-eyebrow">India&apos;s AI Calling Platform · Built for SMEs</span>
-            <h1 className="mt-4 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-brand-navy leading-[1.05]">
-              Run professional <span className="text-gradient">AI calling campaigns</span> for every customer reminder.
+      <section className="bg-hero relative overflow-hidden">
+        <div className="container-max px-6 pt-24 pb-20 lg:pt-28 lg:pb-24 grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
+          <div className="lg:col-span-6 animate-reveal">
+            <span className="eyebrow-pill" data-testid="hero-eyebrow">
+              <PhoneCall className="w-3 h-3" />
+              AI Calling Platform for Indian Businesses
+            </span>
+            <h1 className="h1-hero mt-5">
+              Your customers <br className="hidden sm:block" />
+              called. Every time.
             </h1>
-            <p className="mt-5 text-lg text-slate-600 max-w-xl">
-              Upload your customers, pick a calling purpose, generate a polite Indian-language script, and let an AI voice agent handle hundreds of calls — payment reminders, appointment reminders, lead follow-ups and more.
+            <p className="mt-5 text-[17px] leading-[1.65] text-ink-muted max-w-[460px]">
+              Upload your customer list, generate a script, and let Receptify&apos;s AI voice agent handle the calls — with every outcome tracked in real time.
             </p>
-            <div className="mt-7 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3">
               <Link href="/signup" className="btn-primary" data-testid="hero-cta-primary">
                 Start Free Trial <ArrowRight className="w-4 h-4" />
               </Link>
-              <a href="#how-it-works" className="btn-secondary" data-testid="hero-cta-secondary">
-                Watch Demo
+              <a href="#dashboard-preview" className="btn-secondary" data-testid="hero-cta-secondary">
+                <Play className="w-3.5 h-3.5" /> Watch 2-min Demo
               </a>
             </div>
-            <div className="mt-8 flex flex-wrap items-center gap-3 text-xs">
-              {[
-                { icon: ShieldCheck, label: 'DND-safe' },
-                { icon: IndianRupee, label: 'India-focused' },
-                { icon: Mic, label: 'AI voice calls' },
-                { icon: FileSpreadsheet, label: 'CSV upload' },
-                { icon: Languages, label: 'Hindi · English · Gujarati' },
-              ].map((b, i) => (
-                <div key={i} className="badge bg-white/80 border border-brand-100 text-brand-700">
-                  <b.icon className="w-3.5 h-3.5" /> {b.label}
-                </div>
+            <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-medium text-ink-muted">
+              {['No credit card needed', 'Hindi & English', 'DND-aware'].map((t) => (
+                <span key={t} className="inline-flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> {t}
+                </span>
               ))}
             </div>
           </div>
 
           {/* Hero visual */}
-          <div className="lg:col-span-5 relative animate-fade-in" data-testid="hero-visual">
-            <div className="relative">
-              <div className="glass-strong p-5 relative z-10 max-w-md ml-auto">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-xl bg-brand-50 grid place-items-center text-brand-600">
-                      <PhoneCall className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-brand-navy">Live campaign</div>
-                      <div className="text-xs text-slate-500">Payment Reminders · Jan batch</div>
-                    </div>
-                  </div>
-                  <div className="badge bg-emerald-100 text-emerald-700">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Running
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  {[{ l: 'Total', v: '248' }, { l: 'Answered', v: '187' }, { l: 'Promised', v: '94' }].map((s, i) => (
-                    <div key={i} className="bg-white/80 rounded-xl p-3 border border-slate-100">
-                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{s.l}</div>
-                      <div className="text-lg font-extrabold text-brand-navy">{s.v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-2">
-                  {[
-                    { n: 'Priya P.', t: 'Appointment confirmed', s: 'success' },
-                    { n: 'Rohan M.', t: 'Callback requested', s: 'amber' },
-                    { n: 'Sneha I.', t: 'Payment promised', s: 'success' },
-                  ].map((r, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs px-3 py-2 bg-white/70 rounded-lg border border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-brand-gradient text-white grid place-items-center text-[10px] font-bold">
-                          {r.n.split(' ')[0].charAt(0)}
-                        </div>
-                        <span className="font-medium text-brand-ink">{r.n}</span>
-                      </div>
-                      <span className={r.s === 'success' ? 'text-emerald-600' : 'text-amber-600'}>{r.t}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="glass absolute -bottom-6 -left-6 p-4 w-56 z-0 animate-float">
-                <div className="flex items-center gap-2 mb-1">
-                  <Sparkles className="w-4 h-4 text-brand-600" />
-                  <span className="text-xs font-bold text-brand-navy">AI Script Generator</span>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  &ldquo;Namaste {'{name}'}, this is a reminder from {'{business}'}...&rdquo;
-                </p>
-              </div>
+          <div className="lg:col-span-6 relative" data-testid="hero-visual">
+            <LandingDashboardPreview />
+            {/* Floating glass chips */}
+            <div className="hidden md:block absolute -top-2 -right-3 glass-chip px-4 py-2.5 animate-float-chip" style={{ animationDelay: '0s' }}>
+              <div className="text-[10px] uppercase font-semibold text-ink-subtle tracking-wider">Calls made</div>
+              <div className="text-base font-bold text-ink mt-0.5">4,217</div>
+            </div>
+            <div className="hidden md:flex absolute top-1/2 -right-4 glass-chip items-center gap-2 px-3.5 py-2 animate-float-chip" style={{ animationDelay: '0.8s' }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="text-xs font-semibold text-ink">94% answered</span>
+            </div>
+            <div className="hidden md:block absolute -bottom-3 left-4 glass-chip px-4 py-2.5 animate-float-chip" style={{ animationDelay: '1.6s' }}>
+              <div className="text-[10px] uppercase font-semibold text-ink-subtle tracking-wider">Cost / call</div>
+              <div className="text-base font-bold text-ink mt-0.5">₹2.80 <span className="text-xs font-medium text-ink-muted">avg</span></div>
             </div>
           </div>
         </div>
       </section>
 
+      {/* TRUST STRIP */}
+      <section className="bg-canvas-alt border-y border-line">
+        <div className="container-max px-6 py-5 flex flex-wrap items-center justify-center gap-x-1 gap-y-2 text-[13px] font-medium text-ink-muted">
+          {['DND-Aware Calling', 'Hindi & English Voice', 'CSV Upload in Seconds', 'No Cold Spam', 'Built for Indian Businesses'].map((item, i, arr) => (
+            <span key={item} className="inline-flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-brand-600" />
+              <span>{item}</span>
+              {i < arr.length - 1 && <span className="mx-3 text-brand-100">·</span>}
+            </span>
+          ))}
+        </div>
+      </section>
+
       {/* PROBLEM */}
-      <section className="section-padding bg-white/40">
-        <div className="container-max grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-5">
+      <section className="section-padding">
+        <div className="container-max">
+          <div className="max-w-2xl">
             <span className="overline">The problem</span>
-            <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight">
-              Manual calling drains your team and your money.
-            </h2>
-            <p className="mt-5 text-slate-600">
-              Small Indian businesses spend hours every day calling customers — for reminders, follow-ups, renewals. Most of it is repetitive, easy to delay, and impossible to scale.
+            <h2 className="h2-section mt-3">Manual calling is costing you customers.</h2>
+            <p className="mt-4 text-[17px] leading-[1.65] text-ink-muted">
+              Your team can only call so many people per day. Leads go cold. Reminders are missed. Follow-ups never happen.
             </p>
           </div>
-          <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-12">
             {[
-              'Manual calling takes too much team time',
-              'Hiring full-time calling teams is expensive',
-              'Hot leads slip away due to missed follow-ups',
-              'Reminders get delayed, customers get late fees',
-              'Quality is inconsistent across agents',
-              'Hard to track who called, who answered, who replied',
-            ].map((t, i) => (
-              <div key={i} className="glass p-5 flex gap-3">
-                <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 grid place-items-center shrink-0">
-                  <ChevronDown className="w-4 h-4 rotate-180" />
+              { icon: Clock, stat: '6+ hrs', label: 'spent daily on manual follow-up calls by an average sales team.' },
+              { icon: TrendingDown, stat: '40%', label: 'drop in conversion when leads are not called back within an hour.' },
+              { icon: UserX, stat: '3×', label: 'higher payment default rates when reminders are sent late or missed.' },
+            ].map((c, i) => (
+              <div key={i} className="bg-white border border-line rounded-2xl p-7 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200">
+                <div className="w-11 h-11 rounded-xl bg-brand-50 grid place-items-center">
+                  <c.icon className="w-5 h-5 text-brand-600" />
                 </div>
-                <div className="text-sm font-medium text-brand-ink">{t}</div>
+                <div className="text-[32px] font-bold text-brand-600 mt-5" style={{ letterSpacing: '-0.02em' }}>{c.stat}</div>
+                <p className="text-sm text-ink-muted mt-2 leading-relaxed">{c.label}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* SOLUTION + HOW IT WORKS */}
-      <section id="how-it-works" className="section-padding">
-        <div className="container-max text-center mb-14">
-          <span className="overline">How Receptify works</span>
-          <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight max-w-3xl mx-auto">
-            From customer list to completed calls — in 5 simple steps.
-          </h2>
-        </div>
-        <div className="container-max grid grid-cols-1 md:grid-cols-5 gap-6">
-          {[
-            { icon: Upload, t: 'Upload customers', d: 'Add manually or upload a CSV/Excel.' },
-            { icon: Megaphone, t: 'Pick a use case', d: 'Reminders, follow-ups, renewals & more.' },
-            { icon: Sparkles, t: 'Generate AI script', d: 'Polite, Indian-language scripts in seconds.' },
-            { icon: Calendar, t: 'Schedule campaign', d: 'Pick date, time and calling window.' },
-            { icon: BarChart3, t: 'Track results', d: 'Outcomes, recordings, transcripts, analytics.' },
-          ].map((s, i) => (
-            <div key={i} className="glass p-6 text-center relative">
-              <div className="w-12 h-12 rounded-2xl bg-brand-gradient text-white grid place-items-center mx-auto mb-4 shadow-glow">
-                <s.icon className="w-5 h-5" />
+      {/* SOLUTION / HOW IT WORKS */}
+      <section id="how-it-works" className="section-padding bg-canvas-alt border-y border-line">
+        <div className="container-max">
+          <div className="max-w-2xl">
+            <span className="overline">The solution</span>
+            <h2 className="h2-section mt-3">AI calls your customers, so your team doesn&apos;t have to.</h2>
+            <p className="mt-4 text-[17px] leading-[1.65] text-ink-muted">
+              Upload your customer list, pick a purpose, generate a polite script, and let Receptify handle the calls — with every outcome tracked.
+            </p>
+          </div>
+
+          <div className="mt-14 grid grid-cols-1 md:grid-cols-5 gap-3 md:gap-2 relative">
+            {[
+              { icon: Upload, t: 'Upload list', d: 'CSV or manual entry.' },
+              { icon: Tag, t: 'Pick purpose', d: 'Reminder, follow-up, renewal.' },
+              { icon: Sparkles, t: 'Generate script', d: 'AI-written, multilingual.' },
+              { icon: CalendarClock, t: 'Schedule & launch', d: 'Choose window + retries.' },
+              { icon: BarChart3, t: 'Track outcomes', d: 'Recordings + transcripts.' },
+            ].map((s, i, arr) => (
+              <div key={i} className="relative flex flex-col items-start md:items-center text-left md:text-center">
+                <div className="flex items-center gap-3 md:flex-col md:gap-3 w-full">
+                  <div className="w-8 h-8 rounded-full bg-brand-600 text-white grid place-items-center font-bold text-sm shrink-0">{i + 1}</div>
+                  <s.icon className="w-5 h-5 text-brand-600 hidden md:block" />
+                  <div className="md:mt-1">
+                    <div className="font-semibold text-ink text-[15px]">{s.t}</div>
+                    <div className="text-[13px] text-ink-muted mt-0.5">{s.d}</div>
+                  </div>
+                </div>
+                {i < arr.length - 1 && (
+                  <div className="hidden md:block absolute top-4 left-[60%] w-[80%] border-t border-dashed border-brand-100" />
+                )}
               </div>
-              <div className="absolute top-3 right-4 text-xs font-bold text-brand-100">0{i + 1}</div>
-              <h3 className="text-base font-bold text-brand-navy">{s.t}</h3>
-              <p className="text-sm text-slate-500 mt-1.5">{s.d}</p>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* DASHBOARD PREVIEW (centerpiece) */}
+      <section id="dashboard-preview" className="section-padding">
+        <div className="container-max">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <span className="overline">Dashboard</span>
+            <h2 className="h2-section mt-3">Track every call. Know every outcome.</h2>
+            <p className="mt-4 text-[17px] leading-[1.65] text-ink-muted">
+              Real-time dashboards. Call recordings. AI summaries. Outcome tagging — built into one clean workspace.
+            </p>
+          </div>
+          <div className="relative max-w-[1100px] mx-auto">
+            <LandingDashboardPreview large />
+          </div>
         </div>
       </section>
 
       {/* USE CASES */}
-      <section id="use-cases" className="section-padding bg-white/40">
+      <section id="use-cases" className="section-padding bg-canvas-alt border-y border-line">
         <div className="container-max">
-          <div className="text-center mb-14">
+          <div className="max-w-2xl">
             <span className="overline">Use cases</span>
-            <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight">
-              Built for the calls Indian businesses make every day.
-            </h2>
+            <h2 className="h2-section mt-3">Every customer touchpoint, automated.</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-12">
             {[
-              { icon: Wallet, t: 'Payment Reminders', d: 'Polite EMI, invoice, due-date reminders.' },
-              { icon: Calendar, t: 'Appointment Reminders', d: 'Confirm slot, reduce no-shows.' },
+              { icon: Wallet, t: 'Payment Reminders', d: 'Reduce overdues with polite EMI & invoice nudges.' },
+              { icon: Calendar, t: 'Appointment Reminders', d: 'Confirm bookings, reduce no-shows.' },
               { icon: MessageSquareHeart, t: 'Lead Follow-ups', d: 'Re-engage warm enquiries automatically.' },
-              { icon: Bell, t: 'Feedback Calls', d: 'Capture quick customer feedback.' },
-              { icon: Calendar, t: 'Event Reminders', d: 'Nudge attendees a day before.' },
-              { icon: RefreshCw, t: 'Service Renewals', d: 'Renewal reminders that actually convert.' },
-              { icon: PackageCheck, t: 'COD Confirmations', d: 'Confirm order before dispatch.' },
-              { icon: RefreshCw, t: 'Reactivation Calls', d: 'Win back inactive customers.' },
+              { icon: Bell, t: 'Feedback Calls', d: 'Capture customer feedback at scale.' },
+              { icon: PackageCheck, t: 'COD Confirmations', d: 'Confirm orders before dispatch.' },
+              { icon: RefreshCw, t: 'Service Renewals', d: 'Polite, timely renewal nudges.' },
+              { icon: CalendarClock, t: 'Event Reminders', d: 'A day-before nudge for attendees.' },
+              { icon: RefreshCw, t: 'Customer Reactivation', d: 'Win back inactive customers.' },
+              { icon: RefreshCw, t: 'Subscription Renewals', d: 'Renew memberships on time.' },
             ].map((c, i) => (
-              <div key={i} className="glass p-5 hover:-translate-y-1 hover:shadow-glow-hover transition-all">
-                <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 grid place-items-center mb-3">
-                  <c.icon className="w-4 h-4" />
-                </div>
-                <h3 className="font-bold text-brand-navy">{c.t}</h3>
-                <p className="text-sm text-slate-500 mt-1">{c.d}</p>
+              <div key={i} className="bg-white border border-line rounded-xl p-5 hover:border-brand-600 hover:shadow-card-hover transition-all duration-200">
+                <c.icon className="w-5 h-5 text-brand-600" />
+                <h3 className="font-semibold text-ink text-[15px] mt-2.5">{c.t}</h3>
+                <p className="text-[13px] text-ink-muted mt-1 leading-relaxed">{c.d}</p>
               </div>
             ))}
           </div>
@@ -227,31 +216,25 @@ export default function LandingPage() {
       {/* INDUSTRIES */}
       <section className="section-padding">
         <div className="container-max">
-          <div className="text-center mb-14">
+          <div className="max-w-2xl">
             <span className="overline">Industries</span>
-            <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight">
-              Trusted across small businesses & services.
-            </h2>
+            <h2 className="h2-section mt-3">Built for the businesses that run India.</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-12">
             {[
-              { icon: Landmark, t: 'NBFCs & Finance', d: 'EMI reminders, KYC follow-ups, collections.' },
-              { icon: HeartPulse, t: 'Clinics & Diagnostic Labs', d: 'Appointment slots, report ready notifications.' },
-              { icon: Home, t: 'Real Estate', d: 'Lead follow-ups, site-visit reminders.' },
+              { icon: Landmark, t: 'NBFCs & Finance', d: 'EMI reminders, collections nudges, KYC follow-ups.' },
+              { icon: HeartPulse, t: 'Clinics & Labs', d: 'Appointment confirmations, report-ready alerts.' },
+              { icon: Home, t: 'Real Estate', d: 'Lead follow-ups, site visit reminders.' },
+              { icon: GraduationCap, t: 'Coaching & EdTech', d: 'Admission follow-ups, batch reminders.' },
               { icon: Dumbbell, t: 'Gyms & Fitness', d: 'Membership renewals, class reminders.' },
               { icon: ShoppingBag, t: 'D2C Brands', d: 'COD confirmations, abandoned cart calls.' },
-              { icon: Wrench, t: 'Local Service Businesses', d: 'Service renewals, appointment confirmations.' },
-              { icon: GraduationCap, t: 'Coaching & Ed-Tech', d: 'Admission follow-ups, batch reminders.' },
-              { icon: Building2, t: 'And many more', d: 'Configure for any reminder-style flow.' },
             ].map((c, i) => (
-              <div key={i} className="glass p-6 flex gap-4 hover:-translate-y-1 transition-transform">
-                <div className="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 grid place-items-center shrink-0">
-                  <c.icon className="w-5 h-5" />
+              <div key={i} className="bg-canvas-alt border border-line rounded-2xl p-6 hover:bg-brand-50 transition-colors duration-200">
+                <div className="w-10 h-10 rounded-xl bg-white border border-line grid place-items-center">
+                  <c.icon className="w-5 h-5 text-brand-600" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-brand-navy">{c.t}</h3>
-                  <p className="text-sm text-slate-500 mt-0.5">{c.d}</p>
-                </div>
+                <h3 className="font-bold text-ink text-[15px] mt-4">{c.t}</h3>
+                <p className="text-[13px] text-ink-muted mt-1 leading-relaxed">{c.d}</p>
               </div>
             ))}
           </div>
@@ -259,32 +242,29 @@ export default function LandingPage() {
       </section>
 
       {/* FEATURES */}
-      <section id="features" className="section-padding bg-white/40">
+      <section id="features" className="section-padding bg-canvas-alt border-y border-line">
         <div className="container-max">
-          <div className="text-center mb-14">
+          <div className="max-w-2xl">
             <span className="overline">Features</span>
-            <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight">
-              Everything you need to run AI calling campaigns.
-            </h2>
+            <h2 className="h2-section mt-3">Everything you need to run professional call campaigns.</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-10 gap-y-12 mt-14">
             {[
-              { icon: FileSpreadsheet, t: 'CSV / Excel customer upload', d: 'Bulk import with column mapping & validation.' },
-              { icon: Sparkles, t: 'AI script generator', d: 'Generate polite Indian scripts in seconds.' },
-              { icon: FileText, t: 'Pre-built templates', d: 'Industry-ready templates for every use case.' },
-              { icon: Calendar, t: 'Campaign scheduling', d: 'Pick date, time, calling window, retries.' },
-              { icon: PhoneCall, t: 'AI voice calling', d: 'Natural AI voice agents place every call.' },
-              { icon: Languages, t: 'Multilingual scripts', d: 'English, Hindi, Gujarati out of the box.' },
-              { icon: BarChart3, t: 'Call status tracking', d: 'Real-time campaign progress dashboard.' },
-              { icon: Mic, t: 'Recordings & transcripts', d: 'Listen back, read transcripts, AI summary.' },
-              { icon: ShieldCheck, t: 'Compliance-aware', d: 'DND scrubbing & calling-time guardrails.' },
+              { icon: FileSpreadsheet, t: 'CSV / Excel Upload', d: 'Bulk import with column mapping & phone validation.' },
+              { icon: Sparkles, t: 'AI Script Generator', d: 'Polite, ready-to-use scripts in seconds.' },
+              { icon: Languages, t: 'Hindi & English Voice', d: 'Multilingual scripts with India-native voices.' },
+              { icon: CalendarClock, t: 'Campaign Scheduling', d: 'Pick date, time, calling window, retries.' },
+              { icon: BarChart, t: 'Real-time Call Tracking', d: 'Live progress dashboard for every campaign.' },
+              { icon: Mic, t: 'Call Recordings', d: 'Listen to every call and search by outcome.' },
+              { icon: Tag, t: 'Outcome Tagging', d: 'Auto-classified outcomes for clean reporting.' },
+              { icon: BarChart3, t: 'Analytics Dashboard', d: 'Answer rate, conversion, cost per outcome.' },
             ].map((f, i) => (
-              <div key={i} className="glass p-6">
-                <div className="w-10 h-10 rounded-xl bg-brand-gradient text-white grid place-items-center mb-3 shadow-glow">
-                  <f.icon className="w-4 h-4" />
+              <div key={i}>
+                <div className="w-11 h-11 rounded-xl bg-brand-50 grid place-items-center">
+                  <f.icon className="w-5 h-5 text-brand-600" />
                 </div>
-                <h3 className="font-bold text-brand-navy">{f.t}</h3>
-                <p className="text-sm text-slate-500 mt-1">{f.d}</p>
+                <h3 className="font-bold text-ink text-[15px] mt-4">{f.t}</h3>
+                <p className="text-[13px] text-ink-muted mt-1.5 leading-relaxed">{f.d}</p>
               </div>
             ))}
           </div>
@@ -292,131 +272,53 @@ export default function LandingPage() {
       </section>
 
       {/* COMPLIANCE */}
-      <section className="section-padding">
-        <div className="container-max grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-          <div className="lg:col-span-5">
-            <span className="overline">Compliance-aware by design</span>
-            <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight">
-              Built to support responsible calling.
-            </h2>
-            <p className="mt-5 text-slate-600">
-              Receptify is built for legitimate customer communication — not spam. We help you stay within the spirit of Indian calling rules, but please consult your legal or telecom advisor for full compliance requirements.
+      <section id="compliance" className="section-padding">
+        <div className="container-max">
+          <div className="max-w-2xl">
+            <span className="overline">Compliance</span>
+            <h2 className="h2-section mt-3">Designed to support responsible customer communication.</h2>
+            <p className="mt-4 text-[17px] leading-[1.65] text-ink-muted">
+              Receptify includes built-in guardrails for consent-based calling, DND awareness, and calling-hour controls. We recommend consulting your telecom or legal advisor for full regulatory compliance.
             </p>
           </div>
-          <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-3">
-            {[
-              'Consent-based calling workflows',
-              'DND scrubbing on uploaded lists',
-              'Calling-time restrictions (09:00 – 19:00)',
-              'Registered business use only',
-              'Campaign guardrails before launch',
-              'Avoid spam-like calling patterns',
-              'Customer opt-out is honoured',
-              'Safe, polite reminder templates',
-            ].map((t, i) => (
-              <div key={i} className="glass p-4 flex items-center gap-3">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                <span className="text-sm text-brand-ink font-medium">{t}</span>
-              </div>
+          <div className="mt-8 flex flex-wrap gap-2">
+            {['DND-Aware', 'Consent-Based', 'Time Controls', 'Audit Logs'].map((t) => (
+              <span key={t} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brand-50 border border-brand-100 text-brand-700 text-[13px] font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5" /> {t}
+              </span>
             ))}
           </div>
+          <p className="mt-6 text-xs text-ink-subtle max-w-2xl">
+            Compliance features do not constitute legal advice. Always verify with your telecom provider for your specific use case (TRAI, DLT registration, industry rules).
+          </p>
         </div>
       </section>
 
-      {/* DASHBOARD PREVIEW */}
-      <section className="section-padding bg-white/40">
+      {/* TESTIMONIALS */}
+      <section className="section-padding bg-canvas-alt border-y border-line">
         <div className="container-max">
-          <div className="text-center mb-12">
-            <span className="overline">Dashboard preview</span>
-            <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight">
-              A control room for every calling campaign.
-            </h2>
+          <div className="max-w-2xl mb-12">
+            <span className="overline">From our customers</span>
+            <h2 className="h2-section mt-3">SMEs across India trust Receptify.</h2>
           </div>
-          <div className="glass-strong p-6 lg:p-8 max-w-6xl mx-auto">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              {[
-                { l: 'Total calls', v: '12,438', c: 'text-brand-600' },
-                { l: 'Answered', v: '9,212', c: 'text-emerald-600' },
-                { l: 'Failed', v: '482', c: 'text-red-600' },
-                { l: 'Callbacks', v: '1,089', c: 'text-amber-600' },
-              ].map((k, i) => (
-                <div key={i} className="bg-white rounded-2xl p-4 border border-slate-100">
-                  <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">{k.l}</div>
-                  <div className={`text-2xl font-extrabold mt-1 ${k.c}`}>{k.v}</div>
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 bg-white rounded-2xl p-5 border border-slate-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="font-bold text-brand-navy">Active Campaigns</h4>
-                  <span className="text-xs text-slate-500">Last 7 days</span>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    { n: 'EMI Reminder Batch', p: 78 },
-                    { n: 'Clinic Appointments — Feb', p: 54 },
-                    { n: 'Membership Renewals', p: 91 },
-                  ].map((c, i) => (
-                    <div key={i}>
-                      <div className="flex items-center justify-between text-sm mb-1.5">
-                        <span className="font-medium text-brand-ink">{c.n}</span>
-                        <span className="text-slate-500">{c.p}%</span>
-                      </div>
-                      <div className="h-2 bg-brand-50 rounded-full overflow-hidden">
-                        <div className="h-full bg-brand-gradient" style={{ width: `${c.p}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="bg-white rounded-2xl p-5 border border-slate-100">
-                <h4 className="font-bold text-brand-navy mb-4">Outcome breakdown</h4>
-                {[
-                  { l: 'Interested', v: 38, c: 'bg-emerald-500' },
-                  { l: 'Callback', v: 22, c: 'bg-amber-500' },
-                  { l: 'Not interested', v: 18, c: 'bg-slate-400' },
-                  { l: 'Failed', v: 12, c: 'bg-red-500' },
-                  { l: 'No answer', v: 10, c: 'bg-slate-300' },
-                ].map((o, i) => (
-                  <div key={i} className="flex items-center gap-3 mb-2">
-                    <span className={`w-2 h-2 rounded-full ${o.c}`} />
-                    <span className="text-sm text-slate-600 flex-1">{o.l}</span>
-                    <span className="text-sm font-bold text-brand-navy">{o.v}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* BENEFITS */}
-      <section className="section-padding">
-        <div className="container-max">
-          <div className="text-center mb-14">
-            <span className="overline">Benefits</span>
-            <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight">
-              Why teams switch to AI calling.
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {[
-              'Save calling time and team bandwidth',
-              'Reduce manual repetitive work',
-              'Improve follow-up consistency',
-              'Reach more customers, faster',
-              'Track every call outcome in one place',
-              'Lower operational cost vs. agents',
-              'Never miss a reminder',
-              'Send polite, on-brand messages',
-              'Scale up & down without hiring',
+              { q: 'Our EMI reminder calls used to take 4 days for 2,000 customers. Now it takes 90 minutes. The polite Hindi script our customers actually respond to.', n: 'Rahul Mehta', r: 'Collections Head, Mehta Finance · Pune' },
+              { q: 'I save almost ₹40,000/month on call agents and our appointment no-shows dropped from 22% to 7%. Setup took 15 minutes.', n: 'Dr. Priya Iyer', r: 'Director, Iyer Diagnostics · Bengaluru' },
+              { q: 'We confirm 300+ COD orders a day before dispatch. Receptify cut our RTO by 30%. The dashboard is genuinely useful, not decorative.', n: 'Aditya Kapoor', r: 'Founder, Kraftly D2C · Mumbai' },
             ].map((t, i) => (
-              <div key={i} className="glass p-5 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 grid place-items-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4" />
+              <div key={i} className="bg-white border border-line rounded-2xl p-7 shadow-card">
+                <div className="flex gap-0.5 mb-3">
+                  {Array.from({ length: 5 }).map((_, j) => <Star key={j} className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />)}
                 </div>
-                <span className="text-sm font-medium text-brand-ink">{t}</span>
+                <p className="text-[15px] text-ink italic leading-relaxed">&ldquo;{t.q}&rdquo;</p>
+                <div className="mt-5 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-brand-50 text-brand-600 grid place-items-center text-sm font-bold">{t.n.split(' ').map(x => x[0]).join('').slice(0, 2)}</div>
+                  <div>
+                    <div className="text-sm font-semibold text-ink">{t.n}</div>
+                    <div className="text-xs text-ink-subtle">{t.r}</div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -424,39 +326,54 @@ export default function LandingPage() {
       </section>
 
       {/* PRICING */}
-      <section id="pricing" className="section-padding bg-white/40">
+      <section id="pricing" className="section-padding">
         <div className="container-max">
-          <div className="text-center mb-14">
+          <div className="text-center max-w-xl mx-auto mb-12">
             <span className="overline">Pricing</span>
-            <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight">Simple plans. Start free.</h2>
-            <p className="mt-3 text-slate-600 max-w-xl mx-auto">All plans include AI script generation, dashboard, and analytics. Upgrade or downgrade anytime.</p>
+            <h2 className="h2-section mt-3">Simple, transparent pricing.</h2>
+            <p className="mt-4 text-[17px] leading-[1.65] text-ink-muted">Start free. Upgrade when you grow. Cancel anytime.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
             {[
-              { name: 'Starter', price: '₹999', tagline: 'For small businesses testing AI calls', calls: '250', features: ['AI script generator', 'CSV/Excel upload', 'Call dashboard', 'Email support'] },
-              { name: 'Growth', price: '₹4,999', tagline: 'For growing businesses with regular calling', calls: '2,000', features: ['Everything in Starter', 'Recordings & transcripts', 'Multi-language support', 'Priority email support'], featured: true },
-              { name: 'Business', price: '₹19,999', tagline: 'For high-volume calling teams', calls: '10,000', features: ['Everything in Growth', 'Team members', 'Advanced analytics', 'Priority phone support'] },
-            ].map((p, i) => (
-              <div key={i} className={`glass p-7 relative ${p.featured ? 'ring-2 ring-brand-500 shadow-glow' : ''}`} data-testid={`pricing-${p.name.toLowerCase()}`}>
+              { name: 'Starter', price: '₹999', calls: 250, sub: 'For small teams trying AI calls', features: ['AI script generator', 'CSV / Excel upload', 'Call dashboard', 'Email support'], featured: false },
+              { name: 'Growth', price: '₹4,999', calls: 2000, sub: 'For growing businesses with regular calling', features: ['Everything in Starter', 'Recordings + transcripts', 'Multilingual voices', 'Priority email support'], featured: true },
+              { name: 'Business', price: '₹19,999', calls: 10000, sub: 'For high-volume calling teams', features: ['Everything in Growth', 'Team members', 'Advanced analytics', 'Priority phone support'], featured: false },
+            ].map((p) => (
+              <div
+                key={p.name}
+                className={
+                  p.featured
+                    ? 'bg-brand-navy text-white border border-brand-900 rounded-2xl p-9 relative'
+                    : 'bg-white border border-line rounded-2xl p-9 relative shadow-card'
+                }
+                data-testid={`pricing-${p.name.toLowerCase()}`}
+              >
                 {p.featured && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-gradient text-white text-xs font-bold px-3 py-1 rounded-full">Most popular</div>
+                  <span className="absolute top-5 right-5 bg-brand-50 text-brand-600 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded">Most Popular</span>
                 )}
-                <h3 className="text-xl font-bold text-brand-navy">{p.name}</h3>
-                <p className="text-sm text-slate-500 mt-1">{p.tagline}</p>
-                <div className="mt-5 flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold text-brand-navy">{p.price}</span>
-                  <span className="text-sm text-slate-500">/month</span>
+                <h3 className={p.featured ? 'text-xl font-bold' : 'text-xl font-bold text-ink'}>{p.name}</h3>
+                <p className={p.featured ? 'text-sm text-white/70 mt-1.5' : 'text-sm text-ink-muted mt-1.5'}>{p.sub}</p>
+                <div className="mt-7 flex items-baseline gap-1.5">
+                  <span className={p.featured ? 'text-[40px] font-bold leading-none' : 'text-[40px] font-bold leading-none text-ink'} style={{ letterSpacing: '-0.02em' }}>{p.price}</span>
+                  <span className={p.featured ? 'text-sm text-white/60' : 'text-sm text-ink-subtle'}>/ month</span>
                 </div>
-                <div className="mt-1 text-sm font-semibold text-brand-600">{p.calls} call credits/month</div>
-                <ul className="mt-6 space-y-2.5">
-                  {p.features.map((f, j) => (
-                    <li key={j} className="flex gap-2 text-sm text-slate-700">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" /> {f}
+                <div className={p.featured ? 'mt-1 text-sm font-semibold text-brand-100' : 'mt-1 text-sm font-semibold text-brand-600'}>
+                  {p.calls.toLocaleString()} call credits / month
+                </div>
+                <ul className={p.featured ? 'mt-7 space-y-3 text-sm text-white/85' : 'mt-7 space-y-3 text-sm text-ink-muted'}>
+                  {p.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2.5">
+                      <CheckCircle2 className={p.featured ? 'w-4 h-4 mt-0.5 shrink-0 text-emerald-400' : 'w-4 h-4 mt-0.5 shrink-0 text-emerald-600'} />
+                      {f}
                     </li>
                   ))}
                 </ul>
-                <Link href="/signup" className={`mt-7 w-full ${p.featured ? 'btn-primary' : 'btn-secondary'}`} data-testid={`pricing-cta-${p.name.toLowerCase()}`}>
-                  Get started <ArrowRight className="w-4 h-4" />
+                <Link
+                  href="/signup"
+                  className={p.featured ? 'mt-8 w-full bg-white text-brand-navy text-sm font-semibold px-5 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 hover:bg-brand-50 transition-colors' : 'btn-primary w-full mt-8'}
+                  data-testid={`pricing-cta-${p.name.toLowerCase()}`}
+                >
+                  {p.name === 'Business' ? 'Contact Sales' : 'Start Free Trial'} <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
             ))}
@@ -465,30 +382,29 @@ export default function LandingPage() {
       </section>
 
       {/* FAQ */}
-      <section id="faq" className="section-padding">
+      <section id="faq" className="section-padding bg-canvas-alt border-y border-line">
         <div className="container-max max-w-3xl">
           <div className="text-center mb-12">
             <span className="overline">FAQ</span>
-            <h2 className="mt-3 text-3xl lg:text-4xl font-extrabold text-brand-navy tracking-tight">Common questions.</h2>
+            <h2 className="h2-section mt-3">Common questions.</h2>
           </div>
-          <div className="space-y-3">
+          <div className="bg-white border border-line rounded-2xl overflow-hidden divide-y divide-line">
             {[
-              { q: 'Is AI calling legal in India?', a: 'Yes — for legitimate customer communication where you have a relationship and consent (e.g., reminders, follow-ups). Always consult your legal advisor for your specific use case.' },
-              { q: 'Can I upload customers using Excel?', a: 'Yes. You can upload a CSV or Excel file, map columns, validate phone numbers and confirm import — all in one flow.' },
-              { q: 'Can I customize the call script?', a: 'Absolutely. Generate an AI script, edit it, choose a tone/language, and save it as a template for future campaigns.' },
-              { q: 'Can I use this for payment reminders?', a: 'Yes — payment, EMI, invoice and renewal reminders are core use cases. Use the polite tone templates designed for them.' },
+              { q: 'Is Receptify legal in India?', a: 'Receptify is built to support responsible business-to-customer communication such as appointment reminders, payment follow-ups, and service renewals. Promotional or cold outreach campaigns must follow TRAI and DLT registration requirements. We recommend consulting a telecom compliance advisor for your specific use case.' },
+              { q: 'Can I upload customers using Excel?', a: 'Yes. Upload a CSV or Excel file, map your columns, validate phone numbers, and confirm import — all in one guided flow with duplicate detection.' },
+              { q: 'Can I customize the call script?', a: 'Absolutely. Generate an AI script, edit it, choose tone and language, and save it as a template for future campaigns.' },
+              { q: 'Does it work for payment reminders?', a: 'Yes — payment, EMI, invoice and renewal reminders are core use cases. Use the polite tone templates designed specifically for them.' },
               { q: 'Can I see call recordings and transcripts?', a: 'Yes. Every completed call gets a recording, a transcript, and an AI summary with the recommended next action.' },
-              { q: 'Can I track who answered or requested a callback?', a: 'Yes. Each call gets an outcome tag (interested, callback requested, payment promised, etc.) for easy follow-up.' },
-              { q: 'Does it support Indian businesses?', a: 'Yes — Receptify is built specifically for Indian SMEs, with Hindi/English/Gujarati support and India-focused script templates.' },
-              { q: 'Can I use this for cold calling?', a: 'No — Receptify is designed for legitimate customer communication only. Cold spam calling is not supported.' },
-              { q: 'What industries can use this?', a: 'NBFCs, clinics, real-estate, gyms, D2C brands, coaching, local services and more. Any business that does repetitive customer reminders.' },
+              { q: 'Who answers if the customer wants to speak to a person?', a: 'You can configure the AI agent to capture a callback request, transfer to your phone number, or send a WhatsApp/SMS follow-up automatically.' },
+              { q: 'What languages are supported?', a: 'Today: Hindi, English, and Gujarati. More Indian languages are on the roadmap.' },
+              { q: 'Is this for cold calling?', a: 'No — Receptify is designed for legitimate customer communication only. Cold spam calling is not supported.' },
             ].map((f, i) => (
-              <details key={i} className="glass p-5 group" data-testid={`faq-${i}`}>
-                <summary className="flex items-center justify-between cursor-pointer list-none">
-                  <span className="font-semibold text-brand-navy">{f.q}</span>
-                  <ChevronDown className="w-4 h-4 text-slate-500 group-open:rotate-180 transition-transform" />
+              <details key={i} className="group" data-testid={`faq-${i}`}>
+                <summary className="flex items-center justify-between cursor-pointer list-none px-6 py-5 hover:bg-canvas-alt transition-colors">
+                  <span className="text-[15px] font-semibold text-ink">{f.q}</span>
+                  <ChevronDown className="w-4 h-4 text-ink-subtle group-open:rotate-180 transition-transform" />
                 </summary>
-                <p className="mt-3 text-sm text-slate-600">{f.a}</p>
+                <p className="px-6 pb-5 -mt-1 text-sm text-ink-muted leading-relaxed">{f.a}</p>
               </details>
             ))}
           </div>
@@ -496,36 +412,59 @@ export default function LandingPage() {
       </section>
 
       {/* FINAL CTA */}
-      <section className="section-padding">
-        <div className="container-max">
-          <div className="glass-dark p-10 lg:p-14 text-center relative overflow-hidden">
-            <div className="absolute -top-20 -right-10 w-80 h-80 rounded-full bg-brand-500/40 blur-3xl" />
-            <div className="absolute -bottom-24 -left-10 w-80 h-80 rounded-full bg-brand-700/50 blur-3xl" />
-            <div className="relative">
-              <span className="overline text-brand-100">Get started</span>
-              <h2 className="mt-3 text-3xl lg:text-5xl font-extrabold tracking-tight">
-                Replace manual calling with <span className="bg-gradient-to-r from-white to-brand-100 bg-clip-text text-transparent">Receptify</span>.
-              </h2>
-              <p className="mt-5 text-white/70 max-w-xl mx-auto">
-                Start your free trial in minutes. No credit card needed.
-              </p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link href="/signup" className="btn-primary" data-testid="final-cta-signup">
-                  Start Free Trial <ArrowRight className="w-4 h-4" />
-                </Link>
-                <Link href="/login" className="btn-ghost text-white hover:text-brand-100 hover:bg-white/10" data-testid="final-cta-login">
-                  Sign in
-                </Link>
-              </div>
-            </div>
+      <section className="bg-brand-navy text-white relative overflow-hidden">
+        <div className="absolute inset-0 dotgrid opacity-100" aria-hidden />
+        <div className="container-max px-6 py-24 lg:py-28 relative text-center max-w-[600px] mx-auto">
+          <h2 className="font-bold text-white" style={{ fontSize: 'clamp(28px, 4.4vw, 40px)', lineHeight: 1.15, letterSpacing: '-0.02em' }}>
+            Start your first AI call campaign today.
+          </h2>
+          <p className="mt-5 text-base text-white/65 leading-relaxed">
+            Free for your first 50 calls. No credit card. Set up in under 10 minutes.
+          </p>
+          <div className="mt-9 flex flex-wrap justify-center gap-3">
+            <Link href="/signup" className="btn-primary" data-testid="final-cta-signup">
+              Start Free Trial <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link href="/login" className="btn-dark-ghost" data-testid="final-cta-login">
+              Talk to Sales
+            </Link>
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-slate-200 bg-white/50">
-        <div className="container-max px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <Logo />
-          <p className="text-xs text-slate-500">© 2026 Receptify · AI Voice Receptionist for Indian businesses.</p>
+      {/* FOOTER */}
+      <footer className="bg-brand-navy text-white border-t border-white/10">
+        <div className="container-max px-6 py-14 grid grid-cols-2 md:grid-cols-5 gap-8">
+          <div className="col-span-2 md:col-span-2">
+            <Logo variant="white" />
+            <p className="text-sm text-white/55 mt-4 max-w-xs leading-relaxed">
+              AI Voice Receptionist. Answer Every Call. Built in India, for Indian businesses.
+            </p>
+          </div>
+          {[
+            { h: 'Product', l: [['Features', '#features'], ['Use Cases', '#use-cases'], ['Pricing', '#pricing'], ['Dashboard', '#dashboard-preview']] },
+            { h: 'Industries', l: [['NBFCs', '#'], ['Clinics', '#'], ['Real Estate', '#'], ['D2C Brands', '#']] },
+            { h: 'Resources', l: [['Help Center', '/help'], ['Compliance', '#compliance'], ['FAQ', '#faq']] },
+          ].map((col) => (
+            <div key={col.h}>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-white/40">{col.h}</div>
+              <ul className="mt-4 space-y-2.5">
+                {col.l.map(([label, href]) => (
+                  <li key={label}><a href={href} className="text-sm text-white/75 hover:text-white">{label}</a></li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-white/10">
+          <div className="container-max px-6 py-5 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-white/40">
+            <span>© 2026 Receptify · All rights reserved.</span>
+            <div className="flex gap-5">
+              <a href="#" className="hover:text-white/80">Privacy</a>
+              <a href="#" className="hover:text-white/80">Terms</a>
+              <a href="#compliance" className="hover:text-white/80">Compliance</a>
+            </div>
+          </div>
         </div>
       </footer>
     </main>

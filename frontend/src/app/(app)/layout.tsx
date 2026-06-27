@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         user={{ ownerName: user.ownerName, email: user.email }}
         business={business ? { name: business.name } : undefined}
       />
-      <main className="ml-64 min-h-screen p-6 lg:p-10">{children}</main>
+      <main className="ml-[220px] min-h-screen p-6 lg:p-10">{children}</main>
     </div>
   );
 }

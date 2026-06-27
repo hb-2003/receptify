@@ -28,7 +28,7 @@ const NAV = [
   { href: '/help', label: 'Help', icon: HelpCircle },
 ];
 
-export function Sidebar({ user, business }: { user?: { ownerName: string; email: string }; business?: { name: string } }) {
+export function Sidebar({ user, business }: { user?: { ownerName: string; email: string }; business?: { name: string; planTier?: string } }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -44,15 +44,19 @@ export function Sidebar({ user, business }: { user?: { ownerName: string; email:
     router.push('/login');
   };
 
+  const planLabel = business?.planTier
+    ? `${business.planTier.charAt(0).toUpperCase()}${business.planTier.slice(1)} Plan`
+    : 'Free Trial';
+
   return (
     <aside
-      className="fixed left-0 top-0 h-screen w-64 bg-[#F8FAFC]/95 backdrop-blur-lg border-r border-slate-200 flex flex-col z-30"
+      className="fixed left-0 top-0 h-screen w-[220px] bg-brand-navy flex flex-col z-30 border-r border-brand-900"
       data-testid="dashboard-sidebar"
     >
-      <div className="px-5 py-5 border-b border-slate-200">
-        <Link href="/dashboard"><Logo /></Link>
+      <div className="px-5 pt-5 pb-4">
+        <Link href="/dashboard"><Logo variant="white" /></Link>
       </div>
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-2.5 py-2 space-y-0.5">
         {NAV.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -62,34 +66,34 @@ export function Sidebar({ user, business }: { user?: { ownerName: string; email:
               href={item.href}
               data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
+                'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors',
                 active
-                  ? 'bg-brand-50 text-brand-700'
-                  : 'text-slate-600 hover:bg-brand-50/60 hover:text-brand-700',
+                  ? 'bg-brand-900 text-white'
+                  : 'text-white/65 hover:bg-white/[0.06] hover:text-white',
               )}
             >
-              <Icon className={cn('w-4 h-4', active ? 'text-brand-600' : 'text-slate-500')} strokeWidth={2} />
-              {item.label}
+              <Icon className="w-4 h-4 shrink-0" strokeWidth={2} />
+              <span className="truncate">{item.label}</span>
             </Link>
           );
         })}
       </nav>
-      <div className="border-t border-slate-200 p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-full bg-brand-gradient text-white grid place-items-center font-semibold text-sm">
+      <div className="border-t border-white/10 p-3.5">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="w-9 h-9 rounded-full bg-brand-600 text-white grid place-items-center font-bold text-sm">
             {(user?.ownerName || 'U').slice(0, 1).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-brand-ink truncate">{user?.ownerName || 'User'}</div>
-            <div className="text-xs text-slate-500 truncate">{business?.name || user?.email}</div>
+            <div className="text-[13px] font-semibold text-white truncate">{user?.ownerName || 'User'}</div>
+            <div className="text-[11px] text-white/55 truncate">{business?.name} · {planLabel}</div>
           </div>
         </div>
         <button
           onClick={handleLogout}
           data-testid="logout-button"
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium text-white/70 hover:bg-white/[0.06] hover:text-white transition-colors"
         >
-          <LogOut className="w-4 h-4" /> Sign out
+          <LogOut className="w-3.5 h-3.5" /> Sign out
         </button>
       </div>
     </aside>
