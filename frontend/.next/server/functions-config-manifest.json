@@ -1,1 +1,0 @@
-{"version":1,"functions":{"/api/analytics":{},"/api/auth/login":{},"/api/auth/logout":{},"/api/auth/signup":{},"/api/auth/me":{},"/api/calls/[id]":{},"/api/calls":{},"/api/campaigns/[id]/launch":{},"/api/campaigns/[id]":{},"/api/campaigns":{},"/api/customers/[id]":{},"/api/customers":{},"/api/customers/upload":{},"/api/health":{},"/api/scripts/generate":{},"/api/templates":{}}}
