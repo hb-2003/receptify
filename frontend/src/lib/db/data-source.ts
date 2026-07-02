@@ -18,6 +18,8 @@ import { CallRecording } from './entities/CallRecording';
 import { BillingPlan } from './entities/BillingPlan';
 import { Subscription } from './entities/Subscription';
 import { UsageLog } from './entities/UsageLog';
+import { TwilioCredentials } from './entities/twilio-credentials';
+import { CallEvent } from './entities/call-event';
 
 const AppDataSource = new DataSource({
   type: 'postgres',
@@ -31,17 +33,22 @@ const AppDataSource = new DataSource({
   entities: [
     User, Business, Customer, Campaign, CampaignCustomer, Script, Template,
     Call, CallTranscript, CallRecording, BillingPlan, Subscription, UsageLog,
+    TwilioCredentials, CallEvent,
   ],
   migrations: [path.join(__dirname, 'migrations/*.{ts,js}')],
   migrationsTableName: 'migrations',
 });
 
 let initPromise: Promise<DataSource> | null = null;
-export async function getDB(): Promise<DataSource> {
+
+export async function getDatabase(): Promise<DataSource> {
   if (AppDataSource.isInitialized) return AppDataSource;
   if (!initPromise) initPromise = AppDataSource.initialize();
   return initPromise;
 }
+
+// Backward-compatible alias to support existing Phase 1 endpoints without refactoring 60+ files.
+export const getDB = getDatabase;
 
 // TypeORM CLI requires exactly one DataSource export. We expose ONLY the default.
 export default AppDataSource;

@@ -30,13 +30,13 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
 
-export async function comparePassword(plain: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(plain, hash);
+export async function comparePassword(plainTextPassword: string, hashedPassword: string): Promise<boolean> {
+  return bcrypt.compare(plainTextPassword, hashedPassword);
 }
 
 export async function setAuthCookie(token: string) {
-  const c = await cookies();
-  c.set(COOKIE_NAME, token, {
+  const cookieStore = await cookies();
+  cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: true,
@@ -46,28 +46,28 @@ export async function setAuthCookie(token: string) {
 }
 
 export async function clearAuthCookie() {
-  const c = await cookies();
-  c.delete(COOKIE_NAME);
+  const cookieStore = await cookies();
+  cookieStore.delete(COOKIE_NAME);
 }
 
-export async function getUserFromRequest(req?: NextRequest): Promise<User | null> {
+export async function getUserFromRequest(request?: NextRequest): Promise<User | null> {
   let token: string | undefined;
-  if (req) {
-    token = req.cookies.get(COOKIE_NAME)?.value;
+  if (request) {
+    token = request.cookies.get(COOKIE_NAME)?.value;
   } else {
-    const c = await cookies();
-    token = c.get(COOKIE_NAME)?.value;
+    const cookieStore = await cookies();
+    token = cookieStore.get(COOKIE_NAME)?.value;
   }
   if (!token) return null;
   const payload = verifyToken(token);
   if (!payload) return null;
-  const db = await getDB();
-  const user = await db.getRepository(User).findOne({ where: { id: payload.userId } });
+  const database = await getDB();
+  const user = await database.getRepository(User).findOne({ where: { id: payload.userId } });
   return user;
 }
 
-export async function requireAuth(req?: NextRequest): Promise<User> {
-  const user = await getUserFromRequest(req);
+export async function requireAuth(request?: NextRequest): Promise<User> {
+  const user = await getUserFromRequest(request);
   if (!user) {
     throw new AuthError('Unauthorized');
   }
