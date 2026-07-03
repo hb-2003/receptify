@@ -9,14 +9,14 @@ import { PURPOSE_LABEL, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function CampaignsPage() {
-  const [list, setList] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [campaignList, setCampaignList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const load = async () => {
     const r = await fetch('/api/campaigns');
     const d = await r.json();
-    setList(d.campaigns || []);
-    setLoading(false);
+    setCampaignList(d.campaigns || []);
+    setIsLoading(false);
   };
   useEffect(() => { load(); const t = setInterval(load, 4000); return () => clearInterval(t); }, []);
 
@@ -40,15 +40,15 @@ export default function CampaignsPage() {
         </Link>
       </header>
 
-      {loading ? (
+      {isLoading ? (
         <div className="glass h-60 animate-pulse" />
-      ) : list.length === 0 ? (
+      ) : campaignList.length === 0 ? (
         <EmptyState icon={Megaphone} title="No campaigns yet" description="Create your first AI calling campaign in under 2 minutes." action={
           <Link href="/campaigns/new" className="btn-primary text-sm">Create campaign</Link>
         } />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-testid="campaigns-grid">
-          {list.map((c) => (
+          {campaignList.map((c) => (
             <div key={c.id} className="glass p-5 hover:shadow-glow-hover transition-shadow" data-testid={`campaign-card-${c.id}`}>
               <div className="flex items-start justify-between">
                 <span className="badge bg-brand-50 text-brand-700">{PURPOSE_LABEL[c.purpose] || c.purpose}</span>

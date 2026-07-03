@@ -37,8 +37,8 @@ export default function NewCampaignPage() {
   const [step, setStep] = useState(1);
   const [customers, setCustomers] = useState<any[]>([]);
   const [business, setBusiness] = useState<any>(null);
-  const [generating, setGenerating] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [data, setData] = useState({
     name: '',
@@ -52,9 +52,9 @@ export default function NewCampaignPage() {
     callingWindowEnd: '19:00',
     retryAttempts: 2,
     delayBetweenCalls: 5,
-    complianceConfirmed: false,
+    isComplianceConfirmed: false,
   });
-  const [compliance, setCompliance] = useState({ consent: false, notSpam: false, followRules: false, validList: false });
+  const [compliance, setCompliance] = useState({ hasConsent: false, isNotSpam: false, willFollowRules: false, isListValid: false });
 
   useEffect(() => {
     fetch('/api/customers').then((r) => r.json()).then((d) => setCustomers(d.customers || []));
@@ -68,13 +68,13 @@ export default function NewCampaignPage() {
     if (step === 1) return !!data.purpose;
     if (step === 2) return data.customerIds.length > 0 && !!data.name;
     if (step === 3) return data.scriptText.trim().length > 30;
-    if (step === 6) return compliance.consent && compliance.notSpam && compliance.followRules && compliance.validList;
+    if (step === 6) return compliance.hasConsent && compliance.isNotSpam && compliance.willFollowRules && compliance.isListValid;
     return true;
   };
 
   const generateScript = async () => {
     if (!data.purpose) return;
-    setGenerating(true);
+    setIsGenerating(true);
     try {
       const res = await fetch('/api/scripts/generate', {
         method: 'POST',
@@ -93,17 +93,17 @@ export default function NewCampaignPage() {
     } catch {
       toast.error('Failed to generate');
     } finally {
-      setGenerating(false);
+      setIsGenerating(false);
     }
   };
 
   const submit = async () => {
-    setSubmitting(true);
+    setIsSubmitting(true);
     try {
       const create = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, complianceConfirmed: true }),
+        body: JSON.stringify({ ...data, isComplianceConfirmed: true }),
       });
       const cd = await create.json();
       if (!create.ok) { toast.error(cd.error || 'Failed'); return; }
@@ -112,7 +112,7 @@ export default function NewCampaignPage() {
       toast.success('Campaign launched!');
       router.push(`/campaigns/${cd.campaign.id}`);
     } finally {
-      setSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -216,8 +216,8 @@ export default function NewCampaignPage() {
                 <option value="hi">Hindi</option>
                 <option value="gu">Gujarati</option>
               </select>
-              <button onClick={generateScript} disabled={generating} className="btn-primary text-sm" data-testid="generate-script-button">
-                <Sparkles className="w-4 h-4" /> {generating ? 'Generating…' : 'Generate with AI'}
+              <button onClick={generateScript} disabled={isGenerating} className="btn-primary text-sm" data-testid="generate-script-button">
+                <Sparkles className="w-4 h-4" /> {isGenerating ? 'Generating…' : 'Generate with AI'}
               </button>
             </div>
           </div>
@@ -305,10 +305,10 @@ export default function NewCampaignPage() {
           </div>
           <div className="space-y-3 mt-5">
             {[
-              { k: 'consent', label: 'I have customer consent to contact these customers.' },
-              { k: 'notSpam', label: 'This is not a spam, cold sales, or unsolicited marketing campaign.' },
-              { k: 'followRules', label: 'I will follow Indian telecom and DND calling rules.' },
-              { k: 'validList', label: 'My customer list is accurate, up-to-date, and lawfully sourced.' },
+              { k: 'hasConsent', label: 'I have customer consent to contact these customers.' },
+              { k: 'isNotSpam', label: 'This is not a spam, cold sales, or unsolicited marketing campaign.' },
+              { k: 'willFollowRules', label: 'I will follow Indian telecom and DND calling rules.' },
+              { k: 'isListValid', label: 'My customer list is accurate, up-to-date, and lawfully sourced.' },
             ].map((c) => (
               <label key={c.k} className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:border-brand-300 cursor-pointer" data-testid={`compliance-${c.k}`}>
                 <input type="checkbox" checked={(compliance as any)[c.k]} onChange={(e) => setCompliance((p) => ({ ...p, [c.k]: e.target.checked }))} className="w-4 h-4 mt-0.5" />
@@ -352,8 +352,8 @@ export default function NewCampaignPage() {
             Next <ArrowRight className="w-4 h-4" />
           </button>
         ) : (
-          <button onClick={submit} disabled={submitting} className="btn-primary text-sm" data-testid="campaign-launch-button">
-            <Megaphone className="w-4 h-4" /> {submitting ? 'Launching…' : 'Launch campaign'}
+          <button onClick={submit} disabled={isSubmitting} className="btn-primary text-sm" data-testid="campaign-launch-button">
+            <Megaphone className="w-4 h-4" /> {isSubmitting ? 'Launching…' : 'Launch campaign'}
           </button>
         )}
       </div>

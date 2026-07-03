@@ -9,7 +9,7 @@ import { formatDate, formatDuration } from '@/lib/utils';
 
 export default function CallsPage() {
   const [calls, setCalls] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [outcome, setOutcome] = useState('');
 
@@ -20,7 +20,7 @@ export default function CallsPage() {
     const r = await fetch(`/api/calls?${params.toString()}`);
     const d = await r.json();
     setCalls(d.calls || []);
-    setLoading(false);
+    setIsLoading(false);
   };
   useEffect(() => { load(); }, [status, outcome]);
 
@@ -44,7 +44,7 @@ export default function CallsPage() {
         </select>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div className="glass h-60 animate-pulse" />
       ) : calls.length === 0 ? (
         <EmptyState icon={History} title="No calls yet" description="Launch a campaign to see calls here." />

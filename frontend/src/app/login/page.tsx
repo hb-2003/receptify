@@ -1,40 +1,41 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Logo } from '@/components/ui/Logo';
-import { PhoneCall, Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function LoginPage() {
+// The main login form component that reads search parameters for post-login redirection
+function LoginForm() {
   const router = useRouter();
-  const search = useSearchParams();
-  const next = search?.get('next') || '/dashboard';
+  const searchParameters = useSearchParams();
+  const redirectDestinationUrl = searchParameters?.get('next') || '/dashboard';
   const [email, setEmail] = useState('demo@receptify.in');
   const [password, setPassword] = useState('Demo@1234');
-  const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsSubmitting(true);
     try {
-      const res = await fetch('/api/auth/login', {
+      const authResponse = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || 'Login failed');
+      const responseData = await authResponse.json();
+      if (!authResponse.ok) {
+        toast.error(responseData.error || 'Login failed');
         return;
       }
       toast.success('Welcome back!');
-      router.push(next);
+      router.push(redirectDestinationUrl);
       router.refresh();
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -51,7 +52,7 @@ export default function LoginPage() {
           <h1 className="text-2xl font-extrabold text-brand-navy">Welcome back</h1>
           <p className="text-sm text-slate-500 mt-1">Sign in to your Receptify account</p>
 
-          <form onSubmit={submit} className="mt-6 space-y-4">
+          <form onSubmit={handleLoginSubmit} className="mt-6 space-y-4">
             <div>
               <label className="label-base">Email</label>
               <div className="relative">
@@ -73,19 +74,19 @@ export default function LoginPage() {
                 <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   required
-                  type={showPw ? 'text' : 'password'}
+                  type={showPassword ? 'text' : 'password'}
                   className="input-field pl-10 pr-10"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   data-testid="login-password-input"
                 />
-                <button type="button" onClick={() => setShowPw((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-600">
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <button type="button" onClick={() => setShowPassword((show) => !show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-600">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
-            <button type="submit" disabled={loading} className="btn-primary w-full" data-testid="login-submit-button">
-              {loading ? 'Signing in…' : <>Sign in <ArrowRight className="w-4 h-4" /></>}
+            <button type="submit" disabled={isSubmitting} className="btn-primary w-full" data-testid="login-submit-button">
+              {isSubmitting ? 'Signing in…' : <>Sign in <ArrowRight className="w-4 h-4" /></>}
             </button>
           </form>
 
@@ -100,5 +101,19 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+// Next.js 15 requires pages using useSearchParams() to be wrapped in a Suspense boundary
+// to allow proper static compilation and server-side pre-rendering.
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-marketing">
+        <p className="text-slate-500 text-sm">Loading login screen...</p>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

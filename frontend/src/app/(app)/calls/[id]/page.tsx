@@ -11,13 +11,13 @@ export default function CallDetailPage() {
   const params = useParams();
   const id = params?.id as string;
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/calls/${id}`).then((r) => r.json()).then((d) => { setData(d); setLoading(false); });
+    fetch(`/api/calls/${id}`).then((r) => r.json()).then((d) => { setData(d); setIsLoading(false); });
   }, [id]);
 
-  if (loading || !data?.call) return <div className="glass h-60 animate-pulse" />;
+  if (isLoading || !data?.call) return <div className="glass h-60 animate-pulse" />;
   const { call, customer, campaign, transcript, recording } = data;
 
   return (

@@ -41,7 +41,7 @@ export default function UploadCsvPage() {
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [result, setResult] = useState<any>(null);
-  const [uploading, setUploading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const onFile = (file: File) => {
     Papa.parse(file, {
@@ -65,7 +65,7 @@ export default function UploadCsvPage() {
   };
 
   const handleConfirm = async () => {
-    setUploading(true);
+    setIsUploading(true);
     const rows = rawRows.map((r) => {
       const out: any = {};
       for (const h of headers) {
@@ -81,7 +81,7 @@ export default function UploadCsvPage() {
       body: JSON.stringify({ rows, dedupe: true }),
     });
     const data = await res.json();
-    setUploading(false);
+    setIsUploading(false);
     if (!res.ok) {
       toast.error(data.error || 'Upload failed');
       return;
@@ -152,8 +152,8 @@ export default function UploadCsvPage() {
 
           <div className="flex justify-end gap-2">
             <button onClick={() => setStep('upload')} className="btn-ghost text-sm">Choose different file</button>
-            <button onClick={handleConfirm} disabled={uploading} className="btn-primary text-sm" data-testid="csv-confirm-import-button">
-              {uploading ? 'Importing…' : 'Confirm import'}
+            <button onClick={handleConfirm} disabled={isUploading} className="btn-primary text-sm" data-testid="csv-confirm-import-button">
+              {isUploading ? 'Importing…' : 'Confirm import'}
             </button>
           </div>
         </div>

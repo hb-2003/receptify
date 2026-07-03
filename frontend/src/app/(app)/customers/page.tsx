@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Upload, Users, Phone, Mail, MapPin, Trash2, Pencil } from 'lucide-react';
+import { Plus, Search, Upload, Users, Phone, Mail, MapPin, Trash2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LANGUAGE_LABEL } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -21,34 +21,34 @@ interface Customer {
 }
 
 export default function CustomersPage() {
-  const [list, setList] = useState<Customer[]>([]);
+  const [customerList, setCustomerList] = useState<Customer[]>([]);
   const [q, setQ] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [shouldShowAddModal, setShouldShowAddModal] = useState(false);
   const [form, setForm] = useState({ fullName: '', phone: '', email: '', city: '', language: 'en', customerType: 'customer', notes: '' });
-  const [submitting, setSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const load = async () => {
-    setLoading(true);
+    setIsLoading(true);
     const res = await fetch(`/api/customers?q=${encodeURIComponent(q)}`);
     const data = await res.json();
-    setList(data.customers || []);
-    setLoading(false);
+    setCustomerList(data.customers || []);
+    setIsLoading(false);
   };
 
   useEffect(() => { load(); }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitting(true);
+    setIsSubmitting(true);
     const res = await fetch('/api/customers', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
     });
     const data = await res.json();
-    setSubmitting(false);
+    setIsSubmitting(false);
     if (!res.ok) { toast.error(data.error || 'Failed'); return; }
     toast.success('Customer added');
-    setShowAdd(false);
+    setShouldShowAddModal(false);
     setForm({ fullName: '', phone: '', email: '', city: '', language: 'en', customerType: 'customer', notes: '' });
     load();
   };
@@ -71,7 +71,7 @@ export default function CustomersPage() {
           <Link href="/customers/upload" className="btn-secondary text-sm" data-testid="customers-upload-csv-button">
             <Upload className="w-4 h-4" /> Upload CSV
           </Link>
-          <button onClick={() => setShowAdd(true)} className="btn-primary text-sm" data-testid="customers-add-button">
+          <button onClick={() => setShouldShowAddModal(true)} className="btn-primary text-sm" data-testid="customers-add-button">
             <Plus className="w-4 h-4" /> Add customer
           </button>
         </div>
@@ -90,12 +90,12 @@ export default function CustomersPage() {
         <button onClick={load} className="btn-ghost text-xs" data-testid="customers-search-button">Search</button>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div className="glass h-60 animate-pulse" />
-      ) : list.length === 0 ? (
+      ) : customerList.length === 0 ? (
         <EmptyState icon={Users} title="No customers yet" description="Add your first customer manually or upload a CSV file." action={
           <div className="flex gap-2 justify-center">
-            <button onClick={() => setShowAdd(true)} className="btn-primary text-sm">Add customer</button>
+            <button onClick={() => setShouldShowAddModal(true)} className="btn-primary text-sm">Add customer</button>
             <Link href="/customers/upload" className="btn-secondary text-sm">Upload CSV</Link>
           </div>
         } />
@@ -115,7 +115,7 @@ export default function CustomersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {list.map((c) => (
+                {customerList.map((c) => (
                   <tr key={c.id} className="hover:bg-brand-50/40" data-testid={`customer-row-${c.id}`}>
                     <td className="px-5 py-4">
                       <div className="font-semibold text-brand-ink">{c.fullName}</div>
@@ -139,8 +139,8 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {showAdd && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50 p-4" onClick={() => setShowAdd(false)} data-testid="customer-add-modal">
+      {shouldShowAddModal && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50 p-4" onClick={() => setShouldShowAddModal(false)} data-testid="customer-add-modal">
           <div className="glass-strong p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xl font-bold text-brand-navy">Add a customer</h2>
             <form onSubmit={handleAdd} className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -173,8 +173,8 @@ export default function CustomersPage() {
                 <textarea rows={2} className="input-field" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} data-testid="add-customer-notes-input" />
               </div>
               <div className="sm:col-span-2 flex justify-end gap-2 mt-2">
-                <button type="button" onClick={() => setShowAdd(false)} className="btn-ghost text-sm">Cancel</button>
-                <button type="submit" disabled={submitting} className="btn-primary text-sm" data-testid="add-customer-submit-button">{submitting ? 'Saving…' : 'Add customer'}</button>
+                <button type="button" onClick={() => setShouldShowAddModal(false)} className="btn-ghost text-sm">Cancel</button>
+                <button type="submit" disabled={isSubmitting} className="btn-primary text-sm" data-testid="add-customer-submit-button">{isSubmitting ? 'Saving…' : 'Add customer'}</button>
               </div>
             </form>
           </div>

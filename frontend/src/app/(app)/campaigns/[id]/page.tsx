@@ -13,14 +13,14 @@ export default function CampaignDetailPage() {
   const router = useRouter();
   const id = params?.id as string;
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   const load = async () => {
     const r = await fetch(`/api/campaigns/${id}`);
-    if (!r.ok) { setLoading(false); return; }
+    if (!r.ok) { setIsLoading(false); return; }
     const d = await r.json();
     setData(d);
-    setLoading(false);
+    setIsLoading(false);
   };
   useEffect(() => { load(); const t = setInterval(load, 2000); return () => clearInterval(t); }, [id]);
 
@@ -32,7 +32,7 @@ export default function CampaignDetailPage() {
     load();
   };
 
-  if (loading || !data) return <div className="glass h-60 animate-pulse" />;
+  if (isLoading || !data) return <div className="glass h-60 animate-pulse" />;
 
   const c = data.campaign;
   const calls = data.calls || [];

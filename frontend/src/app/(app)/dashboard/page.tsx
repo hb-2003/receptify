@@ -23,13 +23,13 @@ const OUTCOME_COLORS: Record<string, string> = {
 
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   const load = async () => {
     const res = await fetch('/api/analytics');
     const d = await res.json();
     setData(d);
-    setLoading(false);
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, []);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <div className="h-10 w-64 bg-white/60 rounded-xl animate-pulse" />

@@ -21,7 +21,7 @@ export default function ScriptGeneratorPage() {
     cta: '',
   });
   const [result, setResult] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/me').then((r) => r.json()).then((d) => {
@@ -33,7 +33,7 @@ export default function ScriptGeneratorPage() {
   }, []);
 
   const generate = async () => {
-    setLoading(true);
+    setIsLoading(true);
     try {
       const r = await fetch('/api/scripts/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -44,7 +44,7 @@ export default function ScriptGeneratorPage() {
     } catch (e) {
       toast.error('Failed to generate');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -111,8 +111,8 @@ export default function ScriptGeneratorPage() {
               <label className="label-base">CTA</label>
               <input className="input-field" placeholder="e.g. Pay via UPI today to avoid late fee" value={form.cta} onChange={(e) => setForm({ ...form, cta: e.target.value })} data-testid="sg-cta-input" />
             </div>
-            <button onClick={generate} disabled={loading} className="btn-primary w-full" data-testid="sg-generate-button">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</> : <><Sparkles className="w-4 h-4" /> Generate script</>}
+            <button onClick={generate} disabled={isLoading} className="btn-primary w-full" data-testid="sg-generate-button">
+              {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</> : <><Sparkles className="w-4 h-4" /> Generate script</>}
             </button>
           </div>
         </div>
