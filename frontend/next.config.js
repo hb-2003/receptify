@@ -15,7 +15,7 @@ const nextConfig = {
   // This lets the frontend call endpoints like /api/analytics or /api/customers
   // and routes them to Django without needing Next.js API routes.
   async rewrites() {
-    const backendServerUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8001';
+    const backendServerUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
     return [
       {
         source: '/api/:path*',

@@ -86,8 +86,6 @@ export default function ScriptGeneratorPage() {
                 <label className="label-base">Language</label>
                 <select className="input-field" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} data-testid="sg-language-select">
                   <option value="en">English</option>
-                  <option value="hi">Hindi</option>
-                  <option value="gu">Gujarati</option>
                 </select>
               </div>
               <div>

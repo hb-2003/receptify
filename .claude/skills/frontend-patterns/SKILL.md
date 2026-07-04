@@ -12,6 +12,7 @@ Use this skill when writing or modifying Next.js (App Router) TypeScript code. F
 
 - **Framework:** Next.js 15 App Router (using TypeScript `.tsx` and `.ts` files, never `.js` or `.jsx`).
 - **Styling:** Tailwind CSS + Plus Jakarta Sans font. Premium glassmorphism UI with clean gradients and blue brand palette.
+- **UI Component Foundations:** Built with [shadcn/ui](https://ui.shadcn.com/) for highly accessible, customizable primitives and styled in accordance with [Untitled UI React](https://www.untitledui.com/react) design/component standards. Most UI components leverage these library standards.
 - **Validation:** Zod (for type-safe schema definitions and client/server validation, never Formik or Yup).
 - **Icons:** Lucide React (`lucide-react`).
 - **Charts:** Recharts (`recharts`).
@@ -22,7 +23,7 @@ Use this skill when writing or modifying Next.js (App Router) TypeScript code. F
 
 - **App Router Routing:** Feature pages live in directories under `/src/app/(app)/` (e.g., `src/app/(app)/campaigns/page.tsx`, `src/app/(app)/calls/page.tsx`).
 - **Next.js API Routes:** Serverless API endpoints live under `/src/app/api/` (e.g., `src/app/api/calls/route.ts`).
-- **Reusable UI Components:** Extracted visual components live flat in `src/components/ui/` (e.g., `KpiCard.tsx`, `EmptyState.tsx`, `Sidebar.tsx`, `StatusBadge.tsx`).
+- **Reusable UI Components:** Extracted visual components live flat in `src/components/ui/` (e.g., `KpiCard.tsx`, `EmptyState.tsx`, `Sidebar.tsx`, `StatusBadge.tsx`). These components are built using shadcn/ui primitives and adhere to the visual styling and layouts of Untitled UI React.
 - **All components are functional components.** Use standard React hooks.
 - **State declarations at the top** of the component, in a block before any logic or side effects.
 

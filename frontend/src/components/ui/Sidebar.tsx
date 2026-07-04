@@ -1,10 +1,11 @@
 'use client';
 
+import * as React from 'react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutDashboard, Users, Upload, Megaphone, PlusCircle, Sparkles, History,
+  LayoutDashboard, Users, Megaphone, PlusCircle, Sparkles, History,
   Mic, FileText, BarChart3, FileStack, ShieldCheck, CreditCard, Settings, HelpCircle, LogOut,
 } from 'lucide-react';
 import { Logo } from './Logo';
@@ -13,7 +14,6 @@ import { toast } from 'sonner';
 const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/customers', label: 'Customers', icon: Users },
-  { href: '/customers/upload', label: 'Upload CSV', icon: Upload },
   { href: '/campaigns', label: 'Campaigns', icon: Megaphone },
   { href: '/campaigns/new', label: 'Create Campaign', icon: PlusCircle },
   { href: '/scripts', label: 'AI Script Generator', icon: Sparkles },
@@ -27,6 +27,50 @@ const NAV = [
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/help', label: 'Help', icon: HelpCircle },
 ];
+
+/* ========================================================================= */
+/* composable shadcn/ui base sidebar sub-components                          */
+/* ========================================================================= */
+
+export const SidebarHeader = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("px-5 pt-5 pb-4", className)}
+    {...props}
+  />
+));
+SidebarHeader.displayName = "SidebarHeader";
+
+export const SidebarContent = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <nav
+    ref={ref}
+    className={cn("flex-1 overflow-y-auto px-2.5 py-2 space-y-0.5", className)}
+    {...props}
+  />
+));
+SidebarContent.displayName = "SidebarContent";
+
+export const SidebarFooter = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn("border-t border-white/10 p-3.5", className)}
+    {...props}
+  />
+));
+SidebarFooter.displayName = "SidebarFooter";
+
+/* ========================================================================= */
+/* main Sidebar component                                                    */
+/* ========================================================================= */
 
 export function Sidebar({ user, business }: { user?: { ownerName: string; email: string }; business?: { name: string; planTier?: string } }) {
   const pathname = usePathname();
@@ -53,10 +97,11 @@ export function Sidebar({ user, business }: { user?: { ownerName: string; email:
       className="fixed left-0 top-0 h-screen w-[220px] bg-brand-navy flex flex-col z-30 border-r border-brand-900"
       data-testid="dashboard-sidebar"
     >
-      <div className="px-5 pt-5 pb-4">
+      <SidebarHeader>
         <Link href="/dashboard"><Logo variant="white" /></Link>
-      </div>
-      <nav className="flex-1 overflow-y-auto px-2.5 py-2 space-y-0.5">
+      </SidebarHeader>
+
+      <SidebarContent>
         {NAV.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
@@ -77,8 +122,9 @@ export function Sidebar({ user, business }: { user?: { ownerName: string; email:
             </Link>
           );
         })}
-      </nav>
-      <div className="border-t border-white/10 p-3.5">
+      </SidebarContent>
+
+      <SidebarFooter>
         <div className="flex items-center gap-2.5 mb-3">
           <div className="w-9 h-9 rounded-full bg-brand-600 text-white grid place-items-center font-bold text-sm">
             {(user?.ownerName || 'U').slice(0, 1).toUpperCase()}
@@ -95,7 +141,7 @@ export function Sidebar({ user, business }: { user?: { ownerName: string; email:
         >
           <LogOut className="w-3.5 h-3.5" /> Sign out
         </button>
-      </div>
+      </SidebarFooter>
     </aside>
   );
 }

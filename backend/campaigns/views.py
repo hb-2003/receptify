@@ -17,186 +17,11 @@ from calls.models import Call, CallTranscript, CallRecording
 from customers.views import to_camel_case
 
 
-# Mock Calling Engine Outcomes and Weights
-OUTCOMES = [
-    {'outcome': 'interested', 'status': 'completed', 'weight': 18},
-    {'outcome': 'callback_requested', 'status': 'completed', 'weight': 14},
-    {'outcome': 'payment_promised', 'status': 'completed', 'weight': 10},
-    {'outcome': 'appointment_confirmed', 'status': 'completed', 'weight': 12},
-    {'outcome': 'not_interested', 'status': 'completed', 'weight': 12},
-    {'outcome': 'no_answer', 'status': 'no_answer', 'weight': 18},
-    {'outcome': 'wrong_number', 'status': 'failed', 'weight': 6},
-    {'outcome': 'failed', 'status': 'failed', 'weight': 10},
-]
+from receptify.models import TwilioCredentials
 
-def pick_outcome():
-    total_weight = sum(o['weight'] for o in OUTCOMES)
-    r = random.uniform(0, total_weight)
-    for o in OUTCOMES:
-        r -= o['weight']
-        if r <= 0:
-            return o
-    return OUTCOMES[0]
-
-def mock_transcript(customer_name, business_name, purpose, language, outcome):
-    if language == 'hi':
-        intro = f"AI: Namaste {customer_name} ji, main {business_name} se baat kar raha hoon.\nCustomer: Haan, boliye."
-    elif language == 'gu':
-        intro = f"AI: Namaste {customer_name}, hu {business_name} thi vaat karu chu.\nCustomer: Haan, kahevu chhu."
-    else:
-        intro = f"AI: Hello {customer_name}, this is a call from {business_name}.\nCustomer: Yes, please go ahead."
-
-    purpose_map = {
-        'payment_reminder': 'AI: This is a gentle reminder regarding your upcoming payment due soon.',
-        'appointment_reminder': 'AI: I am calling to remind you about your upcoming appointment with us.',
-        'lead_followup': 'AI: You had enquired with us recently. I wanted to follow up.',
-        'feedback': 'AI: We would love to get your quick feedback on our service.',
-        'event_reminder': 'AI: This is a reminder for the upcoming event you registered for.',
-        'service_renewal': 'AI: Your service is up for renewal soon — wanted to share the renewal details.',
-        'cod_confirmation': 'AI: I am calling to confirm your COD order before we dispatch.',
-        'renewal_reminder': 'AI: Your subscription is due for renewal — want to confirm if you would like to continue.',
-        'reactivation': 'AI: We noticed you have been away for a while — we have something special for you.',
-        'custom': 'AI: I am calling to share important information with you.',
-    }
-    purpose_line = purpose_map.get(purpose, '')
-
-    outcome_map = {
-        'interested': 'Customer: Yes, I am interested. Please send the details.',
-        'callback_requested': 'Customer: I am busy right now, please call back later.',
-        'payment_promised': 'Customer: I will make the payment by tomorrow.',
-        'appointment_confirmed': 'Customer: Yes, I will be there at the scheduled time.',
-        'not_interested': 'Customer: Thank you, but I am not interested right now.',
-        'no_answer': '(No response — call dropped.)',
-        'wrong_number': 'Customer: You have the wrong number.',
-        'failed': '(Call could not connect.)',
-    }
-    outcome_reply = outcome_map.get(outcome, '')
-
-    closing = 'AI: Thank you for your time. Have a great day!'
-    return f"{intro}\n{purpose_line}\n{outcome_reply}\n{closing}"
-
-def mock_summary(outcome):
-    summary_map = {
-        'interested': 'Customer expressed clear interest. Recommend follow-up with detailed offer.',
-        'callback_requested': 'Customer requested a callback. Schedule for later today.',
-        'payment_promised': 'Customer committed to payment by next working day.',
-        'appointment_confirmed': 'Appointment confirmed by customer.',
-        'not_interested': 'Customer declined politely. No follow-up needed.',
-        'no_answer': 'No response from customer. Retry as per campaign policy.',
-        'wrong_number': 'Number does not belong to the intended customer. Update CRM.',
-        'failed': 'Call could not be connected due to network or carrier issue.',
-    }
-    return summary_map.get(outcome, 'Call pending.')
-
-
-# Asynchronous Mock Call Simulator Worker
-def run_mock_campaign(campaign_id):
-    try:
-        time.sleep(1) # Subtle buffer for launching transition
-        campaign = Campaign.objects.get(id=campaign_id)
-        
-        # Get associated customers
-        cc_list = CampaignCustomer.objects.filter(campaign_id=campaign_id)
-        
-        # Initialize campaign status
-        campaign.status = 'running'
-        campaign.total_contacts = len(cc_list)
-        campaign.calls_completed = 0
-        campaign.calls_answered = 0
-        campaign.calls_failed = 0
-        campaign.save()
-
-        # Create queued call rows
-        calls = []
-        for cc in cc_list:
-            calls.append(
-                Call(
-                    campaign_id=cc.campaign_id,
-                    customer_id=cc.customer_id,
-                    status='queued',
-                    outcome='pending',
-                    attempt_number=1,
-                    duration_sec=0
-                )
-            )
-        
-        with transaction.atomic():
-            created_calls = Call.objects.bulk_create(calls)
-
-        # Progressively simulate each call
-        for call in created_calls:
-            # 1. Ringing
-            call.status = 'ringing'
-            call.save()
-            time.sleep(random.uniform(0.4, 0.8))
-
-            # 2. In progress
-            choice = pick_outcome()
-            call.status = 'in_progress'
-            call.save()
-            time.sleep(random.uniform(0.5, 1.3))
-
-            # 3. Decision & Completed
-            duration = random.randint(35, 125) if choice['status'] == 'completed' else (
-                random.randint(5, 15) if choice['status'] == 'no_answer' else random.randint(3, 9)
-            )
-            
-            call.duration_sec = duration
-            call.outcome = choice['outcome']
-            call.status = choice['status']
-            call.save()
-
-            # Generate Recording & Transcript
-            if choice['status'] == 'completed':
-                customer = Customer.objects.get(id=call.customer_id)
-                transcript_text = mock_transcript(
-                    customer.full_name,
-                    campaign.business.name if campaign.business else 'our team',
-                    campaign.purpose,
-                    campaign.language,
-                    choice['outcome']
-                )
-
-                # Save transcription and audio record
-                CallTranscript.objects.create(
-                    call=call,
-                    text=transcript_text,
-                    summary=mock_summary(choice['outcome'])
-                )
-                CallRecording.objects.create(
-                    call=call,
-                    audio_url='/audio/sample-recording.wav',
-                    duration_sec=duration
-                )
-
-            # Update Campaign stats atomically
-            campaign = Campaign.objects.get(id=campaign_id)
-            campaign.calls_completed = F('calls_completed') + 1
-            if choice['status'] == 'completed':
-                campaign.calls_answered = F('calls_answered') + 1
-            if choice['status'] == 'failed':
-                campaign.calls_failed = F('calls_failed') + 1
-            campaign.save()
-
-            time.sleep(0.2)
-
-        # Set campaign final status
-        campaign = Campaign.objects.get(id=campaign_id)
-        if campaign.calls_completed >= campaign.total_contacts:
-            campaign.status = 'completed'
-            campaign.save()
-
-    except Exception as e:
-        # If the background simulation breaks unexpectedly, we mark the campaign
-        # as failed so it doesn't get stuck in 'running' forever. This allows the
-        # user to troubleshoot and try launching again.
-        print(f"Error running mock campaign: {str(e)}")
-        try:
-            campaign = Campaign.objects.get(id=campaign_id)
-            campaign.status = 'failed'
-            campaign.save()
-        except Exception as inner_e:
-            print(f"Failed to update campaign status to failed: {str(inner_e)}")
+# NOTE: The mock calling simulator thread (run_mock_campaign) and its utilities (OUTCOMES,
+# pick_outcome, mock_transcript, mock_summary) have been completely removed for KAN-17.
+# We now transition campaigns to 'scheduled' status and queue them for live outbound dialer processing.
 
 
 class CampaignListCreateView(APIView):
@@ -312,22 +137,52 @@ class CampaignLaunchView(APIView):
             with transaction.atomic():
                 campaign = Campaign.objects.select_for_update().get(id=id, business_id=user.business_id)
 
+                # Validate compliance agreement has been checked
                 if not campaign.is_compliance_confirmed:
                     return Response({'error': 'Compliance confirmation required before launch'}, status=status.HTTP_400_BAD_REQUEST)
 
-                if campaign.status == 'running':
-                    serializer = CampaignSerializer(campaign)
-                    return Response({'campaign': to_camel_case(serializer.data), 'alreadyRunning': True}, status=status.HTTP_200_OK)
+                # Validate that only draft campaigns can be launched/scheduled
+                if campaign.status != 'draft':
+                    return Response({'error': 'Only draft campaigns can be launched.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                # Set the status to running inside the locked transaction immediately
-                campaign.status = 'running'
+                # Validate that Twilio credentials are configured for this business
+                if not TwilioCredentials.objects.filter(business_id=user.business_id).exists():
+                    return Response({'error': 'No Twilio credentials configured for your business. Please set them up in settings first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Fetch associated contacts to make sure the campaign is not empty
+                campaign_customers = CampaignCustomer.objects.filter(campaign_id=campaign.id)
+                if not campaign_customers.exists():
+                    return Response({'error': 'Cannot launch a campaign with no contacts. Please add customers to this campaign first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Set campaign status to scheduled and use Live Twilio channel type
+                campaign.status = 'scheduled'
+                campaign.channel_type = 1
+                campaign.total_contacts = campaign_customers.count()
+                campaign.calls_completed = 0
+                campaign.calls_answered = 0
+                campaign.calls_failed = 0
                 campaign.save()
 
-        except Campaign.DoesNotExist:
-            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+                # Generate initial queued calls for poller processing
+                queued_calls = []
+                for campaign_customer in campaign_customers:
+                    queued_calls.append(
+                        Call(
+                            campaign_id=campaign.id,
+                            customer_id=campaign_customer.customer_id,
+                            status='queued',
+                            outcome='pending',
+                            attempt_number=1,
+                            duration_sec=0,
+                            channel_type=1 # Live Twilio
+                        )
+                    )
 
-        # Fire and forget Campaign simulation in separate background thread
-        threading.Thread(target=run_mock_campaign, args=(campaign.id,)).start()
+                # Bulk save call records atomically
+                Call.objects.bulk_create(queued_calls)
+
+        except Campaign.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_444_NOT_FOUND if False else status.HTTP_404_NOT_FOUND)
 
         serializer = CampaignSerializer(campaign)
         return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_200_OK)

@@ -6,6 +6,7 @@ import { Plus, Search, Upload, Users, Phone, Mail, MapPin, Trash2 } from 'lucide
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LANGUAGE_LABEL } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 
 interface Customer {
   id: string;
@@ -38,6 +39,16 @@ export default function CustomersPage() {
 
   useEffect(() => { load(); }, []);
 
+  const openModal = () => {
+    setForm({ fullName: '', phone: '', email: '', city: '', language: 'en', customerType: 'customer', notes: '' });
+    setShouldShowAddModal(true);
+  };
+
+  const closeModal = () => {
+    setForm({ fullName: '', phone: '', email: '', city: '', language: 'en', customerType: 'customer', notes: '' });
+    setShouldShowAddModal(false);
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -48,8 +59,7 @@ export default function CustomersPage() {
     setIsSubmitting(false);
     if (!res.ok) { toast.error(data.error || 'Failed'); return; }
     toast.success('Customer added');
-    setShouldShowAddModal(false);
-    setForm({ fullName: '', phone: '', email: '', city: '', language: 'en', customerType: 'customer', notes: '' });
+    closeModal();
     load();
   };
 
@@ -71,7 +81,7 @@ export default function CustomersPage() {
           <Link href="/customers/upload" className="btn-secondary text-sm" data-testid="customers-upload-csv-button">
             <Upload className="w-4 h-4" /> Upload CSV
           </Link>
-          <button onClick={() => setShouldShowAddModal(true)} className="btn-primary text-sm" data-testid="customers-add-button">
+          <button onClick={openModal} className="btn-primary text-sm" data-testid="customers-add-button">
             <Plus className="w-4 h-4" /> Add customer
           </button>
         </div>
@@ -95,7 +105,7 @@ export default function CustomersPage() {
       ) : customerList.length === 0 ? (
         <EmptyState icon={Users} title="No customers yet" description="Add your first customer manually or upload a CSV file." action={
           <div className="flex gap-2 justify-center">
-            <button onClick={() => setShouldShowAddModal(true)} className="btn-primary text-sm">Add customer</button>
+            <button onClick={openModal} className="btn-primary text-sm">Add customer</button>
             <Link href="/customers/upload" className="btn-secondary text-sm">Upload CSV</Link>
           </div>
         } />
@@ -123,10 +133,10 @@ export default function CustomersPage() {
                     </td>
                     <td className="px-5 py-4 text-slate-700"><span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-slate-400" /> {c.phone}</span></td>
                     <td className="px-5 py-4 text-slate-700">{c.city ? <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" />{c.city}</span> : '—'}</td>
-                    <td className="px-5 py-4"><span className="badge bg-brand-50 text-brand-700">{LANGUAGE_LABEL[c.language] || c.language}</span></td>
+                    <td className="px-5 py-4"><Badge variant="outline">{LANGUAGE_LABEL[c.language] || c.language}</Badge></td>
                     <td className="px-5 py-4 text-slate-600">{c.customerType || '—'}</td>
                     <td className="px-5 py-4">
-                      <span className={`badge ${c.consentStatus === 'granted' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{c.consentStatus}</span>
+                      <Badge variant={c.consentStatus === 'granted' ? 'success' : 'warning'}>{c.consentStatus}</Badge>
                     </td>
                     <td className="px-5 py-4 text-right">
                       <button onClick={() => handleDelete(c.id)} className="text-slate-400 hover:text-red-600 p-1" data-testid={`customer-delete-${c.id}`}><Trash2 className="w-4 h-4" /></button>
@@ -140,7 +150,7 @@ export default function CustomersPage() {
       )}
 
       {shouldShowAddModal && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50 p-4" onClick={() => setShouldShowAddModal(false)} data-testid="customer-add-modal">
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm grid place-items-center z-50 p-4" onClick={closeModal} data-testid="customer-add-modal">
           <div className="glass-strong p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xl font-bold text-brand-navy">Add a customer</h2>
             <form onSubmit={handleAdd} className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -164,8 +174,6 @@ export default function CustomersPage() {
                 <label className="label-base">Language</label>
                 <select className="input-field" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} data-testid="add-customer-language-select">
                   <option value="en">English</option>
-                  <option value="hi">Hindi</option>
-                  <option value="gu">Gujarati</option>
                 </select>
               </div>
               <div className="sm:col-span-2">
@@ -173,7 +181,7 @@ export default function CustomersPage() {
                 <textarea rows={2} className="input-field" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} data-testid="add-customer-notes-input" />
               </div>
               <div className="sm:col-span-2 flex justify-end gap-2 mt-2">
-                <button type="button" onClick={() => setShouldShowAddModal(false)} className="btn-ghost text-sm">Cancel</button>
+                <button type="button" onClick={closeModal} className="btn-secondary text-sm">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="btn-primary text-sm" data-testid="add-customer-submit-button">{isSubmitting ? 'Saving…' : 'Add customer'}</button>
               </div>
             </form>

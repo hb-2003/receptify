@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { format } from 'date-fns';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -36,13 +37,15 @@ export const PURPOSE_LABEL: Record<string, string> = {
 
 export const LANGUAGE_LABEL: Record<string, string> = {
   en: 'English',
-  hi: 'Hindi',
-  gu: 'Gujarati',
 };
 
 export function formatDate(d: Date | string): string {
   const date = typeof d === 'string' ? new Date(d) : d;
-  return date.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  try {
+    return format(date, 'dd MMM yyyy, hh:mm a');
+  } catch {
+    return '—';
+  }
 }
 
 export function formatDuration(sec: number): string {

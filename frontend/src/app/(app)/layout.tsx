@@ -15,7 +15,7 @@ async function fetchCurrentUserProfile() {
   }
 
   // Use the backend URL provided in environments, falling back to local Django development port
-  const backendServerUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8001';
+  const backendServerUrl = process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000';
 
   try {
     // Send the user's auth token cookie along to let Django verify who they are
