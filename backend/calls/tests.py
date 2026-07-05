@@ -119,6 +119,11 @@ class TwilioCallWebhookTests(TestCase):
         # Verify event was logged
         self.assertTrue(CallEvent.objects.filter(call=self.call, event_type="twilio_completed").exists())
 
+        # Verify parent Campaign aggregates are atomically synchronized
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.calls_completed, 1)
+        self.assertEqual(self.campaign.calls_answered, 1)
+
     @patch("calls.views_twilio.verify_twilio_signature", return_value=True)
     def test_call_status_busy_webhook(self, mock_verify):
         url = reverse("call_status", kwargs={"id": self.call.id})
@@ -135,6 +140,11 @@ class TwilioCallWebhookTests(TestCase):
         self.call.refresh_from_db()
         self.assertEqual(self.call.status, "failed")
         self.assertEqual(self.call.outcome, "busy")
+
+        # Verify parent Campaign aggregates are atomically synchronized
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.calls_completed, 1)
+        self.assertEqual(self.campaign.calls_failed, 1)
 
 
 class TTSAdapterTests(unittest.IsolatedAsyncioTestCase):

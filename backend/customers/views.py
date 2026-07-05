@@ -1,5 +1,7 @@
 import re
 import csv
+import json
+from datetime import datetime
 from django.db import transaction
 from django.http import HttpResponse
 from django.db.models import Q
@@ -12,6 +14,10 @@ from customers.serializers import CustomerSerializer
 # Helpers for Indian Phone Formatting and Validation
 def format_phone(phone: str) -> str:
     digits = re.sub(r'\D', '', phone)
+    # Strip leading zero from 11-digit numbers (common Indian entry style)
+    if len(digits) == 11 and digits.startswith('0'):
+        digits = digits[1:]
+        
     if len(digits) == 10:
         return f'+91{digits}'
     if len(digits) == 12 and digits.startswith('91'):
@@ -22,11 +28,37 @@ def format_phone(phone: str) -> str:
 
 def is_valid_indian_phone(phone: str) -> bool:
     digits = re.sub(r'\D', '', phone)
+    # Strip leading zero from 11-digit numbers
+    if len(digits) == 11 and digits.startswith('0'):
+        digits = digits[1:]
+        
     if len(digits) == 10:
         return bool(re.match(r'^[6-9]', digits))
     if len(digits) == 12 and digits.startswith('91'):
         return bool(re.match(r'^91[6-9]', digits))
     return False
+
+def parse_date_string(date_str):
+    if not date_str:
+        return None
+    date_str = str(date_str).strip()
+    if not date_str or date_str.lower() in ['none', 'null', 'undefined', '']:
+        return None
+        
+    formats = [
+        '%Y-%m-%d',  # ISO: 2026-02-15
+        '%d/%m/%Y',  # Indian standard: 15/02/2026
+        '%d-%m-%Y',  # Indian alternative: 15-02-2026
+        '%Y/%m/%d',  # 2026/02/15
+        '%b %d, %Y', # Feb 15, 2026
+        '%B %d, %Y', # February 15, 2026
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 class CustomerListCreateView(APIView):
@@ -53,15 +85,6 @@ class CustomerListCreateView(APIView):
         queryset = queryset.order_by('-created_at')[:500]
         
         serializer = CustomerSerializer(queryset, many=True)
-        # Note: Frontend expects camelCase keys inside JSON.
-        # But our django fields match the database exactly (which has snake_case)!
-        # Wait, does the frontend expect camelCase keys inside Customer JSON?
-        # Let's check how the frontend renders Customer properties (e.g. customer.fullName, customer.customerType).
-        # Ah! In TypeScript/Next.js, they map to camelCase (customer.fullName, etc.).
-        # In Django, DRF serialize fields default to matching model properties (which are snake_case: full_name, customer_type!).
-        # To bridge this gap, we can write a clean helper to serialize keys into camelCase, OR customize the Serializer!
-        # Yes! Writing a clean helper to recursively convert dictionary keys to camelCase is incredibly robust,
-        # and guarantees that the frontend receives exactly what it expects!
         return Response({
             'customers': [to_camel_case(c) for c in serializer.data],
             'total': len(serializer.data)
@@ -84,6 +107,7 @@ class CustomerListCreateView(APIView):
         appointment_date = request.data.get('appointmentDate')
         notes = request.data.get('notes', '').strip()
         consent_status = request.data.get('consentStatus', 'granted').strip()
+        custom_fields = request.data.get('customFields')
 
         if not full_name or not raw_phone:
             return Response({'error': 'Missing name or phone'}, status=status.HTTP_400_BAD_REQUEST)
@@ -92,9 +116,8 @@ class CustomerListCreateView(APIView):
         if not is_valid_indian_phone(phone):
             return Response({'error': 'Invalid Indian phone number'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Build tags as string (Next.js tags are string/text in DB: "tags: text")
-        # In TypeORM: tags was a text field defaulting to ''
         tags_str = ','.join(tags) if isinstance(tags, list) else str(tags)
+        custom_fields_str = json.dumps(custom_fields) if isinstance(custom_fields, dict) else (str(custom_fields) if custom_fields else None)
 
         try:
             customer = Customer.objects.create(
@@ -106,11 +129,11 @@ class CustomerListCreateView(APIView):
                 language=language if language in ['en', 'hi', 'gu'] else 'en',
                 customer_type=customer_type if customer_type else None,
                 tags=tags_str,
-                due_date=due_date if due_date else None,
-                appointment_date=appointment_date if appointment_date else None,
+                due_date=parse_date_string(due_date),
+                appointment_date=parse_date_string(appointment_date),
                 notes=notes if notes else None,
                 consent_status=consent_status,
-                custom_fields=None
+                custom_fields=custom_fields_str
             )
 
             serializer = CustomerSerializer(customer)
@@ -158,11 +181,17 @@ class CustomerDetailView(APIView):
                     val = format_phone(str(val))
                     if not is_valid_indian_phone(val):
                         return Response({'error': 'Invalid Indian phone number'}, status=status.HTTP_400_BAD_REQUEST)
+                elif camel_k in ['dueDate', 'appointmentDate']:
+                    val = parse_date_string(val)
                 setattr(customer, snake_k, val if val != '' else None)
 
         if 'tags' in request.data:
             tags = request.data.get('tags')
             customer.tags = ','.join(tags) if isinstance(tags, list) else str(tags)
+
+        if 'customFields' in request.data:
+            cfields = request.data.get('customFields')
+            customer.custom_fields = json.dumps(cfields) if isinstance(cfields, dict) else (str(cfields) if cfields else None)
 
         customer.save()
         serializer = CustomerSerializer(customer)
@@ -180,7 +209,7 @@ class CustomerDetailView(APIView):
 
 class CustomerUploadView(APIView):
     def get(self, request):
-        # Return sample CSV for downlaod
+        # Return sample CSV for download
         sample = (
             "fullName,phone,email,city,language,customerType,notes,dueDate,appointmentDate\n"
             "Priya Patel,9812345001,priya@example.com,Mumbai,en,patient,Annual checkup due,,2026-02-15\n"
@@ -210,6 +239,11 @@ class CustomerUploadView(APIView):
         invalid = []
         customers_to_create = []
 
+        standard_keys = {
+            'fullName', 'phone', 'email', 'city', 'language', 
+            'customerType', 'notes', 'dueDate', 'appointmentDate'
+        }
+
         for row in rows:
             full_name = row.get('fullName', '').strip()
             raw_phone = str(row.get('phone', '')).strip()
@@ -235,6 +269,26 @@ class CustomerUploadView(APIView):
             due_date = row.get('dueDate')
             appointment_date = row.get('appointmentDate')
 
+            # Parse language cleanly (e.g. "English" or "Hindi" or "Gujarati" -> en, hi, gu)
+            lang_clean = 'en'
+            lang_raw = language.lower()
+            if lang_raw.startswith('en'):
+                lang_clean = 'en'
+            elif lang_raw.startswith('hi') or lang_raw.startswith('hin'):
+                lang_clean = 'hi'
+            elif lang_raw.startswith('gu'):
+                lang_clean = 'gu'
+
+            # Gather extra keys into custom fields
+            extra_fields = {}
+            for k, v in row.items():
+                if k not in standard_keys and v is not None:
+                    v_str = str(v).strip()
+                    if v_str and v_str != 'nan' and v_str != 'None':
+                        extra_fields[k] = v_str
+            
+            custom_fields_str = json.dumps(extra_fields) if extra_fields else None
+
             # Handle tag formatting matching Next.js logic
             tags = [customer_type] if customer_type else []
             tags_str = ','.join(tags)
@@ -244,18 +298,18 @@ class CustomerUploadView(APIView):
                     business_id=user.business_id,
                     full_name=full_name,
                     phone=phone,
-                    email=email if email else None,
-                    city=city if city else None,
-                    language=language if language in ['en', 'hi', 'gu'] else 'en',
-                    customer_type=customer_type if customer_type else None,
+                    email=email if email and email != 'nan' else None,
+                    city=city if city and city != 'nan' else None,
+                    language=lang_clean,
+                    customer_type=customer_type if customer_type and customer_type != 'nan' else None,
                     tags=tags_str,
-                    notes=notes if notes else None,
-                    due_date=due_date if due_date else None,
-                    appointment_date=appointment_date if appointment_date else None,
-                    consent_status='granted'
+                    notes=notes if notes and notes != 'nan' else None,
+                    due_date=parse_date_string(due_date),
+                    appointment_date=parse_date_string(appointment_date),
+                    consent_status='granted',
+                    custom_fields=custom_fields_str
                 )
             )
-            # Add to set so rows inside the same file don't double import
             existing_phones.add(phone)
 
         # Bulk save
@@ -280,7 +334,6 @@ def to_camel_case(data):
     elif isinstance(data, dict):
         new_dict = {}
         for k, v in data.items():
-            # Convert snake_case to camelCase
             parts = k.split('_')
             camel_key = parts[0] + ''.join(x.title() for x in parts[1:])
             new_dict[camel_key] = to_camel_case(v)

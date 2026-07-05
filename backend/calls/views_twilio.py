@@ -6,6 +6,7 @@ from xml.sax.saxutils import escape
 from receptify.crypto import decrypt
 from receptify.models import TwilioCredentials
 from calls.models import Call, CallEvent
+from django.db.models import F
 
 
 def verify_twilio_signature(request, auth_token):
@@ -140,12 +141,17 @@ class TwilioCallStatusView(APIView):
             "canceled": "failed"
         }
 
+        new_status = call.status
         if call_status in status_mapping:
-            call.status = status_mapping[call_status]
+            new_status = status_mapping[call_status]
+            call.status = new_status
 
+        # Safely convert CallDuration to integer to prevent crashes on non-numeric input
+        duration_sec = 0
         if call_duration:
             try:
-                call.duration_sec = int(call_duration)
+                duration_sec = int(call_duration)
+                call.duration_sec = duration_sec
             except ValueError:
                 pass
 
@@ -162,6 +168,16 @@ class TwilioCallStatusView(APIView):
             call.outcome = "canceled"
 
         call.save()
+
+        # Update parent Campaign stats atomically when a call resolves
+        if new_status in ["completed", "failed"]:
+            campaign = call.campaign
+            campaign.calls_completed = F("calls_completed") + 1
+            if call.outcome in ["completed", "answered"]:
+                campaign.calls_answered = F("calls_answered") + 1
+            elif call.outcome in ["failed", "no_answer", "busy", "canceled"]:
+                campaign.calls_failed = F("calls_failed") + 1
+            campaign.save()
 
         # Log transition event
         CallEvent.objects.create(
