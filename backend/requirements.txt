@@ -7,4 +7,4 @@ PyJWT
 bcrypt
 pycryptodomex
 httpx
-google-cloud-texttospeech
+google-cloud-texttospeech==2.14.1
