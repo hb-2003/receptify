@@ -1,10 +1,10 @@
-import uuid
 import unittest
 from django.test import TestCase
 from django.urls import reverse
 from unittest.mock import AsyncMock, patch
 from google.cloud import texttospeech
-from receptify.models import Business
+from receptify.models import Business, TwilioCredentials
+from receptify.crypto import encrypt
 from campaigns.models import Campaign
 from customers.models import Customer
 from calls.models import Call, CallEvent
@@ -63,14 +63,25 @@ class TwilioCallWebhookTests(TestCase):
             customer=self.customer,
             status="queued"
         )
+        # Seed mock Twilio credentials with encrypted token
+        TwilioCredentials.objects.create(
+            business=self.business,
+            account_sid="AC_test_account_sid_99999",
+            auth_token=encrypt("fake_auth_token_for_signature_verification"),
+            phone_number="+1234567890"
+        )
 
-    def test_dynamic_call_twiml_webhook(self):
+    @patch("calls.views_twilio.verify_twilio_signature", return_value=True)
+    def test_dynamic_call_twiml_webhook(self, mock_verify):
         url = reverse("call_twiml", kwargs={"id": self.call.id})
         response = self.client.post(url)
 
         # Verify status and headers
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/xml")
+
+        # Verify signature validator was called
+        mock_verify.assert_called_once()
 
         # Verify call status updated to in_progress
         self.call.refresh_from_db()
@@ -84,7 +95,8 @@ class TwilioCallWebhookTests(TestCase):
         self.assertIn("<Response>", xml_content)
         self.assertIn('<Say voice="alice">Welcome Rajesh, please pay your bills.</Say>', xml_content)
 
-    def test_call_status_completed_webhook(self):
+    @patch("calls.views_twilio.verify_twilio_signature", return_value=True)
+    def test_call_status_completed_webhook(self, mock_verify):
         url = reverse("call_status", kwargs={"id": self.call.id})
         payload = {
             "CallStatus": "completed",
@@ -95,6 +107,9 @@ class TwilioCallWebhookTests(TestCase):
         # Verify status code
         self.assertEqual(response.status_code, 200)
 
+        # Verify signature validator was called
+        mock_verify.assert_called_once()
+
         # Verify call record updated
         self.call.refresh_from_db()
         self.assertEqual(self.call.status, "completed")
@@ -104,7 +119,8 @@ class TwilioCallWebhookTests(TestCase):
         # Verify event was logged
         self.assertTrue(CallEvent.objects.filter(call=self.call, event_type="twilio_completed").exists())
 
-    def test_call_status_busy_webhook(self):
+    @patch("calls.views_twilio.verify_twilio_signature", return_value=True)
+    def test_call_status_busy_webhook(self, mock_verify):
         url = reverse("call_status", kwargs={"id": self.call.id})
         payload = {
             "CallStatus": "busy"
@@ -112,6 +128,9 @@ class TwilioCallWebhookTests(TestCase):
         response = self.client.post(url, data=payload)
 
         self.assertEqual(response.status_code, 200)
+
+        # Verify signature validator was called
+        mock_verify.assert_called_once()
 
         self.call.refresh_from_db()
         self.assertEqual(self.call.status, "failed")
