@@ -2,6 +2,7 @@ import hmac
 import hashlib
 import base64
 from django.http import HttpResponse
+from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework import status
 from calls.models import Call, CallEvent
@@ -49,8 +50,13 @@ class TwimlVoiceView(APIView):
         except TwilioCredentials.DoesNotExist:
             auth_token = None
 
-        # Verify signature if present to ensure the request is authentically from Twilio
+        # Verify signature to ensure the request is authentically from Twilio.
+        # In production (DEBUG is False), signature validation is strictly enforced.
         signature = request.headers.get('X-Twilio-Signature')
+        if not settings.DEBUG:
+            if not signature or not auth_token:
+                return HttpResponse("<Response><Reject/></Response>", content_type="application/xml", status=status.HTTP_403_FORBIDDEN)
+
         if signature and auth_token:
             # Reconstruct the absolute URL requested by Twilio
             absolute_url = request.build_absolute_uri()
@@ -101,8 +107,13 @@ class TwilioStatusCallbackView(APIView):
         except TwilioCredentials.DoesNotExist:
             auth_token = None
 
-        # Validate the Twilio callback signature
+        # Validate the Twilio callback signature.
+        # In production (DEBUG is False), signature validation is strictly enforced.
         signature = request.headers.get('X-Twilio-Signature')
+        if not settings.DEBUG:
+            if not signature or not auth_token:
+                return HttpResponse("Forbidden: Signature Required", status=status.HTTP_403_FORBIDDEN)
+
         if signature and auth_token:
             absolute_url = request.build_absolute_uri()
             if request.headers.get('X-Forwarded-Proto') == 'https':
@@ -111,9 +122,15 @@ class TwilioStatusCallbackView(APIView):
             if not verify_twilio_signature(absolute_url, request.POST, auth_token, signature):
                 return HttpResponse("Forbidden: Invalid Signature", status=status.HTTP_403_FORBIDDEN)
 
-        # Parse status and parameters sent by Twilio
+        # Parse status and parameters sent by Twilio safely
         twilio_status = request.POST.get('CallStatus', '').lower()
-        duration_sec = int(request.POST.get('CallDuration', 0))
+        
+        # Safely convert CallDuration to integer to prevent crashes on non-numeric input
+        raw_duration = request.POST.get('CallDuration', '0')
+        try:
+            duration_sec = int(raw_duration)
+        except ValueError:
+            duration_sec = 0
 
         # Map Twilio call statuses to our internal state options
         # queued -> queued, ringing -> ringing, in-progress -> in_progress,
@@ -141,6 +158,17 @@ class TwilioStatusCallbackView(APIView):
             call.outcome = 'no_answer'
 
         call.save()
+
+        # Update parent Campaign stats atomically when a call resolves
+        from django.db.models import F
+        if new_status in ['completed', 'failed', 'no_answer']:
+            campaign = call.campaign
+            campaign.calls_completed = F('calls_completed') + 1
+            if call.outcome == 'answered':
+                campaign.calls_answered = F('calls_answered') + 1
+            elif call.outcome in ['failed', 'no_answer']:
+                campaign.calls_failed = F('calls_failed') + 1
+            campaign.save()
 
         # Log the state change as a traceable call event in history
         CallEvent.objects.create(

@@ -18,6 +18,8 @@ def is_trai_compliant_time() -> bool:
 # In a real system this would query an official registry database, but for our prototype
 # we use a local pattern check to simulate this filter reliably.
 def is_ndnc_blocked(phone_number: str) -> bool:
+    if not phone_number:
+        return False
     # Clean up formatting to isolate the digits
     clean_number = "".join(filter(str.isdigit, phone_number))
     

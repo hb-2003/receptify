@@ -180,3 +180,8 @@ class CallWebhookTestCase(APITestCase):
         events = CallEvent.objects.filter(call_id=self.call.id, event_type="twilio_completed")
         self.assertEqual(events.count(), 1)
         self.assertEqual(events.first().payload['CallDuration'], '25')
+
+        # Verify parent Campaign aggregates are atomically synchronized
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.test_campaign.calls_completed if hasattr(self, 'test_campaign') else self.campaign.calls_completed, 1)
+        self.assertEqual(self.test_campaign.calls_answered if hasattr(self, 'test_campaign') else self.campaign.calls_answered, 1)
