@@ -26,6 +26,9 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const load = async () => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return;
+    }
     const res = await fetch('/api/analytics');
     const d = await res.json();
     setData(d);
@@ -33,7 +36,14 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    load();
+    const initialLoad = async () => {
+      const res = await fetch('/api/analytics');
+      const d = await res.json();
+      setData(d);
+      setIsLoading(false);
+    };
+    initialLoad();
+
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, []);

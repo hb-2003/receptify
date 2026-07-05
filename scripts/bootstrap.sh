@@ -51,9 +51,9 @@ su - postgres -c "psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='receptify'\"
 su - postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='receptify'\"" | grep -q 1 || \
   su - postgres -c "psql -c \"CREATE DATABASE receptify OWNER receptify;\""
 
-# 6. Run migrations + seed (idempotent)
-log "Running migrations + seed"
-cd /app/frontend && yarn db:seed
+# 6. Run migrations (idempotent)
+log "Running migrations"
+cd /app/backend && venv/bin/python manage.py migrate
 
 # 7. Restart frontend + backend so they pick up a fresh DB pool
 supervisorctl restart frontend backend
