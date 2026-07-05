@@ -1,4 +1,5 @@
 from django.db import connection
+from django.db.models import Count, Q
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -21,10 +22,18 @@ class AnalyticsView(APIView):
         # 1. Standard KPI counts via ORM
         total_customers = Customer.objects.filter(business_id=business_id).count()
         total_campaigns = Campaign.objects.filter(business_id=business_id).count()
-        total_calls = Call.objects.filter(campaign__business_id=business_id).count()
-        answered = Call.objects.filter(campaign__business_id=business_id, status='completed').count()
-        failed = Call.objects.filter(campaign__business_id=business_id, status='failed').count()
-        callbacks = Call.objects.filter(campaign__business_id=business_id, outcome='callback_requested').count()
+        
+        # Optimize multiple count queries on calls into a single database roundtrip
+        call_stats = Call.objects.filter(campaign__business_id=business_id).aggregate(
+            total=Count('id'),
+            answered=Count('id', filter=Q(status='completed')),
+            failed=Count('id', filter=Q(status='failed')),
+            callbacks=Count('id', filter=Q(outcome='callback_requested'))
+        )
+        total_calls = call_stats['total']
+        answered = call_stats['answered']
+        failed = call_stats['failed']
+        callbacks = call_stats['callbacks']
 
         # Rates
         answer_rate = round((answered / total_calls) * 100) if total_calls else 0

@@ -8,14 +8,25 @@ def get_encryption_key() -> bytes:
         # Fallback key matching TypeScript: crypto.scryptSync('development_fallback_key_receptify', 'salt', 32)
         # In Python, we can do scrypt derivation:
         import hashlib
-        return hashlib.scrypt(
-            password=b"development_fallback_key_receptify",
-            salt=b"salt",
-            n=16384,
-            r=8,
-            p=1,
-            dklen=32
-        )
+        try:
+            return hashlib.scrypt(
+                password=b"development_fallback_key_receptify",
+                salt=b"salt",
+                n=16384,
+                r=8,
+                p=1,
+                dklen=32
+            )
+        except AttributeError:
+            from Cryptodome.Protocol.KDF import scrypt
+            return scrypt(
+                password=b"development_fallback_key_receptify",
+                salt=b"salt",
+                key_len=32,
+                N=16384,
+                r=8,
+                p=1
+            )
     
     # Ensure key is exactly 32 bytes via padding or slicing (matches TypeScript logic)
     padded_secret = secret.ljust(32, '0')[:32]

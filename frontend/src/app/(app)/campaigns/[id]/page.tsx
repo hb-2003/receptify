@@ -16,13 +16,28 @@ export default function CampaignDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const load = async () => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      return;
+    }
     const r = await fetch(`/api/campaigns/${id}`);
     if (!r.ok) { setIsLoading(false); return; }
     const d = await r.json();
     setData(d);
     setIsLoading(false);
   };
-  useEffect(() => { load(); const t = setInterval(load, 2000); return () => clearInterval(t); }, [id]);
+  useEffect(() => {
+    const initialLoad = async () => {
+      const r = await fetch(`/api/campaigns/${id}`);
+      if (!r.ok) { setIsLoading(false); return; }
+      const d = await r.json();
+      setData(d);
+      setIsLoading(false);
+    };
+    initialLoad();
+
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [id]);
 
   const launch = async () => {
     const r = await fetch(`/api/campaigns/${id}/launch`, { method: 'POST' });
