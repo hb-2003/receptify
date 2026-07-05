@@ -2,6 +2,8 @@ import asyncio
 import time
 import httpx
 import base64
+from decouple import config
+from django.db import transaction
 from receptify.models import TwilioCredentials
 from receptify.crypto import decrypt
 from campaigns.models import Campaign
@@ -112,12 +114,31 @@ async def dial_customer(call, campaign, account_sid, auth_token, from_phone, sem
         return True
 
 async def run_live_campaign_dialer_async(campaign_id: str):
-    # Transition campaign status to 'running'
+    # Transition campaign status to 'running' atomically using row-level database locking.
+    # If the campaign is already locked or is no longer 'scheduled', we abort instantly.
     try:
-        campaign = await asyncio.to_thread(Campaign.objects.get, id=campaign_id)
-        campaign.status = 'running'
-        await asyncio.to_thread(campaign.save)
-    except Campaign.DoesNotExist:
+        def acquire_campaign_lock():
+            with transaction.atomic():
+                try:
+                    c = Campaign.objects.select_for_update(nowait=True).get(id=campaign_id)
+                except Exception:
+                    # Lock is already held by another parallel worker
+                    return None
+                
+                if c.status != 'scheduled':
+                    return None
+                
+                c.status = 'running'
+                c.save(update_fields=['status'])
+                return c
+
+        campaign = await asyncio.to_thread(acquire_campaign_lock)
+        if not campaign:
+            print(f"[Dialer] Campaign {campaign_id} is already running, locked, or completed. Safely aborting duplicate thread execution.")
+            return
+
+    except Exception as e:
+        print(f"[Dialer] Error acquiring launch lock for campaign {campaign_id}: {str(e)}")
         return
 
     # Load business Twilio credentials
