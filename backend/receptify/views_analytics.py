@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from customers.models import Customer
-from campaigns.models import Campaign
+from campaigns.models import Campaign, Script
 from campaigns.serializers import CampaignSerializer
 from calls.models import Call
 from calls.serializers import CallSerializer
@@ -21,6 +21,8 @@ class AnalyticsView(APIView):
         # 1. Standard KPI counts via ORM
         total_customers = Customer.objects.filter(business_id=business_id).count()
         total_campaigns = Campaign.objects.filter(business_id=business_id).count()
+        active_campaigns = Campaign.objects.filter(business_id=business_id, status='active').count()
+        total_scripts = Script.objects.filter(business_id=business_id).count()
         total_calls = Call.objects.filter(campaign__business_id=business_id).count()
         answered = Call.objects.filter(campaign__business_id=business_id, status='completed').count()
         failed = Call.objects.filter(campaign__business_id=business_id, status='failed').count()
@@ -75,11 +77,14 @@ class AnalyticsView(APIView):
             'totals': {
                 'totalCustomers': total_customers,
                 'totalCampaigns': total_campaigns,
+                'activeCampaigns': active_campaigns,
+                'totalScripts': total_scripts,
                 'totalCalls': total_calls,
                 'answered': answered,
                 'failed': failed,
                 'callbacks': callbacks
             },
+            'onboardingDismissed': user.business.is_onboarding_dismissed if user.business else False,
             'answerRate': answer_rate,
             'callbackRate': callback_rate,
             'failedRate': failed_rate,

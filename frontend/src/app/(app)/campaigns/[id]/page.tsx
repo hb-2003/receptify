@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Megaphone, Users, PhoneCall, BarChart3, Play, Pause } from 'lucide-react';
@@ -15,14 +15,19 @@ export default function CampaignDetailPage() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const r = await fetch(`/api/campaigns/${id}`);
     if (!r.ok) { setIsLoading(false); return; }
     const d = await r.json();
     setData(d);
     setIsLoading(false);
-  };
-  useEffect(() => { load(); const t = setInterval(load, 2000); return () => clearInterval(t); }, [id]);
+  }, [id]);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [id, load]);
 
   const launch = async () => {
     const r = await fetch(`/api/campaigns/${id}/launch`, { method: 'POST' });
