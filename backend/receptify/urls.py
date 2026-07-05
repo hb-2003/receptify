@@ -1,5 +1,8 @@
 from django.urls import path, include
-from receptify.views_auth import LoginView, SignupView, MeView, LogoutView
+from receptify.views_auth import (
+    LoginView, SignupView, MeView, LogoutView, DismissOnboardingView,
+    ForgotPasswordView, ResetPasswordView, VerifyEmailView, ResendVerificationView
+)
 from receptify.views_analytics import AnalyticsView
 from receptify.views_twilio import TwilioCredentialsView
 
@@ -16,6 +19,11 @@ urlpatterns = [
     path('api/auth/signup', SignupView.as_view(), name='auth_signup'),
     path('api/auth/me', MeView.as_view(), name='auth_me'),
     path('api/auth/logout', LogoutView.as_view(), name='auth_logout'),
+    path('api/auth/onboarding/dismiss', DismissOnboardingView.as_view(), name='dismiss_onboarding'),
+    path('api/auth/forgot-password', ForgotPasswordView.as_view(), name='auth_forgot_password'),
+    path('api/auth/reset-password', ResetPasswordView.as_view(), name='auth_reset_password'),
+    path('api/auth/verify-email', VerifyEmailView.as_view(), name='auth_verify_email'),
+    path('api/auth/resend-verification', ResendVerificationView.as_view(), name='auth_resend_verification'),
     
     # Analytics Endpoint
     path('api/analytics', AnalyticsView.as_view(), name='analytics'),
