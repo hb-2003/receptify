@@ -7,6 +7,7 @@ from receptify.views_twilio import TwilioCredentialsView
 from customers.views import CustomerListCreateView
 from campaigns.views import CampaignListCreateView, TemplateListCreateView
 from calls.views import CallListView
+from calls.views_twilio import TwilioTwiMLView
 from llm.views import GenerateScriptView
 
 urlpatterns = [
@@ -21,6 +22,7 @@ urlpatterns = [
     
     # Twilio Integration Endpoint
     path('api/v1/business/twilio', TwilioCredentialsView.as_view(), name='business_twilio'),
+    path('api/v1/voice/twiml', TwilioTwiMLView.as_view(), name='twiml_endpoint'),
     
     # Backward compatible endpoints
     path('api/v1/auth/login', LoginView.as_view(), name='auth_login_v1'),
