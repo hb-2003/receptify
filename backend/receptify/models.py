@@ -10,6 +10,7 @@ class Business(models.Model):
     is_verified = models.BooleanField(default=False)
     call_credits = models.IntegerField(default=100)
     plan_tier = models.CharField(max_length=50, default='starter')
+    is_onboarding_dismissed = models.BooleanField(default=False, db_column='onboarding_dismissed')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -93,3 +94,15 @@ class UsageLog(models.Model):
 
     class Meta:
         db_table = 'usage_logs'
+
+
+class VerificationToken(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_column='user_id')
+    purpose = models.CharField(max_length=50)  # 'verification' or 'reset'
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = 'verification_tokens'

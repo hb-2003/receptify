@@ -1,14 +1,15 @@
 import uuid
+from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APITransactionTestCase
 from receptify.models import Business, TwilioCredentials, User
 from campaigns.models import Campaign, CampaignCustomer
 from customers.models import Customer
-from calls.models import Call
+from calls.models import Call, CallEvent
 
 # Tests the campaign launching and queueing validations for KAN-17
-class CampaignLaunchRoutingTestCase(APITestCase):
+class CampaignLaunchRoutingTestCase(APITransactionTestCase):
     
     def setUp(self):
         # Create a test business profile
@@ -139,3 +140,152 @@ class CampaignLaunchRoutingTestCase(APITestCase):
         self.assertEqual(queued_call.customer_id, self.test_customer.id)
         self.assertEqual(queued_call.status, "queued")
         self.assertEqual(queued_call.channel_type, 1) # Live Twilio channel
+
+    # Case E: Successful launch executes the background dialer thread, transitions status to completed, and dispatches calls
+    @patch('time.sleep', return_value=None)
+    def test_launch_runs_dialer_and_completes_campaign(self, mock_sleep):
+        # Set up Twilio credentials with properly encrypted auth token
+        from receptify.crypto import encrypt
+        TwilioCredentials.objects.create(
+            business=self.test_business,
+            account_sid="AC_mock_twilio_account_sid_99999",
+            auth_token=encrypt("raw_secret_twilio_auth_token"),
+            phone_number="+1234567890"
+        )
+        CampaignCustomer.objects.create(
+            campaign=self.test_campaign,
+            customer_id=self.test_customer.id
+        )
+        
+        # Patch is_trai_compliant_time to True to ensure the dialer runs
+        with patch('campaigns.dialer.is_trai_compliant_time', return_value=True):
+            response = self.client.post(self.launch_url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            
+            # Since the background thread runs concurrently, we wait for it to complete
+            import time as real_time
+            timeout = 2.0
+            start_time = real_time.time()
+            while real_time.time() - start_time < timeout:
+                campaign = Campaign.objects.get(id=self.test_campaign.id)
+                if campaign.status == 'completed':
+                    break
+                real_time.sleep(0.05)
+                
+            campaign = Campaign.objects.get(id=self.test_campaign.id)
+            self.assertEqual(campaign.status, 'completed')
+            
+            # Check call has transitioned to ringing (indicating successful mock dispatch)
+            queued_call = Call.objects.filter(campaign_id=self.test_campaign.id).first()
+            self.assertEqual(queued_call.status, 'ringing')
+            
+            # Check call event is recorded
+            self.assertTrue(CallEvent.objects.filter(call=queued_call, event_type="outbound_initiated_mock").exists())
+
+    # Case F: Dialer halts and defers campaign if launched outside TRAI compliance window
+    @patch('time.sleep', return_value=None)
+    def test_launch_defers_campaign_outside_trai_hours(self, mock_sleep):
+        # Set up Twilio credentials with properly encrypted auth token
+        from receptify.crypto import encrypt
+        TwilioCredentials.objects.create(
+            business=self.test_business,
+            account_sid="AC_mock_twilio_account_sid_99999",
+            auth_token=encrypt("raw_secret_twilio_auth_token"),
+            phone_number="+1234567890"
+        )
+        CampaignCustomer.objects.create(
+            campaign=self.test_campaign,
+            customer_id=self.test_customer.id
+        )
+        
+        # Force the TRAI compliance check to return False (non-compliant hours)
+        with patch('campaigns.dialer.is_trai_compliant_time', return_value=False):
+            response = self.client.post(self.launch_url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            
+            # Wait for thread execution to exit
+            import time as real_time
+            real_time.sleep(0.2)
+            
+            # Campaign status should have stayed 'scheduled' (execution deferred)
+            campaign = Campaign.objects.get(id=self.test_campaign.id)
+            self.assertEqual(campaign.status, 'scheduled')
+            
+            # Call should have stayed 'queued'
+            queued_call = Call.objects.filter(campaign_id=self.test_campaign.id).first()
+            self.assertEqual(queued_call.status, 'queued')
+
+    # Case G: Dialer scrubs and blocks phone numbers listed on the DND registry
+    @patch('time.sleep', return_value=None)
+    def test_launch_scrubs_and_blocks_dnd_numbers(self, mock_sleep):
+        # Set up Twilio credentials with properly encrypted auth token
+        from receptify.crypto import encrypt
+        TwilioCredentials.objects.create(
+            business=self.test_business,
+            account_sid="AC_mock_twilio_account_sid_99999",
+            auth_token=encrypt("raw_secret_twilio_auth_token"),
+            phone_number="+1234567890"
+        )
+        
+        # Create a customer with a DND number (ending in "00")
+        dnd_customer = Customer.objects.create(
+            business_id=self.test_business.id,
+            full_name="DND User",
+            phone="+919876543000",
+            city="Delhi",
+            language="en",
+            consent_status="granted"
+        )
+        CampaignCustomer.objects.create(
+            campaign=self.test_campaign,
+            customer_id=dnd_customer.id
+        )
+        
+        with patch('campaigns.dialer.is_trai_compliant_time', return_value=True):
+            response = self.client.post(self.launch_url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            
+            # Wait for campaign status to be completed
+            import time as real_time
+            timeout = 2.0
+            start_time = real_time.time()
+            while real_time.time() - start_time < timeout:
+                campaign = Campaign.objects.get(id=self.test_campaign.id)
+                if campaign.status == 'completed':
+                    break
+                real_time.sleep(0.05)
+            
+            # Campaign should finish processing
+            campaign = Campaign.objects.get(id=self.test_campaign.id)
+            self.assertEqual(campaign.status, 'completed')
+            
+            # Call should have been marked as failed and outcome as blocked
+            blocked_call = Call.objects.filter(campaign_id=self.test_campaign.id).first()
+            self.assertEqual(blocked_call.status, 'failed')
+            self.assertEqual(blocked_call.outcome, 'blocked')
+            self.assertIn("NDNC", blocked_call.notes)
+            
+            # Verify the blocked event was logged in history
+            self.assertTrue(CallEvent.objects.filter(call=blocked_call, event_type="ndnc_blocked").exists())
+
+    # Case H: Launching should fail if business has insufficient call credits
+    def test_launch_fails_with_insufficient_credits(self):
+        # Set up Twilio credentials and associate contact
+        TwilioCredentials.objects.create(
+            business=self.test_business,
+            account_sid="AC_mock_twilio_account_sid_99999",
+            auth_token="encryptedtokensecret",
+            phone_number="+1234567890"
+        )
+        CampaignCustomer.objects.create(
+            campaign=self.test_campaign,
+            customer_id=self.test_customer.id
+        )
+        
+        # Set business call credits to 0
+        self.test_business.call_credits = 0
+        self.test_business.save()
+        
+        response = self.client.post(self.launch_url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Insufficient call credits", response.data['error'])

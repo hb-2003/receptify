@@ -13,16 +13,18 @@ export default function CallsPage() {
   const [status, setStatus] = useState('');
   const [outcome, setOutcome] = useState('');
 
-  const load = async () => {
-    const params = new URLSearchParams();
-    if (status) params.set('status', status);
-    if (outcome) params.set('outcome', outcome);
-    const r = await fetch(`/api/calls?${params.toString()}`);
-    const d = await r.json();
-    setCalls(d.calls || []);
-    setIsLoading(false);
-  };
-  useEffect(() => { load(); }, [status, outcome]);
+  useEffect(() => {
+    const load = async () => {
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (outcome) params.set('outcome', outcome);
+      const r = await fetch(`/api/calls?${params.toString()}`);
+      const d = await r.json();
+      setCalls(d.calls || []);
+      setIsLoading(false);
+    };
+    load();
+  }, [status, outcome]);
 
   return (
     <div className="space-y-6" data-testid="calls-page">
