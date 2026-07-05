@@ -169,6 +169,11 @@ class CampaignLaunchView(APIView):
                 campaign.calls_failed = 0
                 campaign.save()
 
+                # Deduct calling credits atomically from the business balance
+                business = user.business
+                business.call_credits = F('call_credits') - contacts_count
+                business.save()
+
                 # Generate initial queued calls for poller processing
                 queued_calls = []
                 for campaign_customer in campaign_customers:

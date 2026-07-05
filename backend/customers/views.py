@@ -95,18 +95,18 @@ class CustomerListCreateView(APIView):
         if not user.business_id:
             return Response({'error': 'No business associated with user'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Parse request body (expected camelCase)
-        full_name = request.data.get('fullName', '').strip()
-        raw_phone = request.data.get('phone', '').strip()
-        email = request.data.get('email', '').strip()
-        city = request.data.get('city', '').strip()
-        language = request.data.get('language', 'en').strip()
-        customer_type = request.data.get('customerType', '').strip()
-        tags = request.data.get('tags', [])
+        # Parse request body (expected camelCase) Safely with null-coercion guards
+        full_name = (request.data.get('fullName') or '').strip()
+        raw_phone = (request.data.get('phone') or '').strip()
+        email = (request.data.get('email') or '').strip()
+        city = (request.data.get('city') or '').strip()
+        language = (request.data.get('language') or 'en').strip()
+        customer_type = (request.data.get('customerType') or '').strip()
+        tags = request.data.get('tags') or []
         due_date = request.data.get('dueDate')
         appointment_date = request.data.get('appointmentDate')
-        notes = request.data.get('notes', '').strip()
-        consent_status = request.data.get('consentStatus', 'granted').strip()
+        notes = (request.data.get('notes') or '').strip()
+        consent_status = (request.data.get('consentStatus') or 'granted').strip()
         custom_fields = request.data.get('customFields')
 
         if not full_name or not raw_phone:
@@ -261,11 +261,11 @@ class CustomerUploadView(APIView):
                 duplicates.append(row)
                 continue
 
-            email = str(row.get('email', '')).strip()
-            city = str(row.get('city', '')).strip()
-            language = str(row.get('language', 'en')).strip()
-            customer_type = str(row.get('customerType', '')).strip()
-            notes = str(row.get('notes', '')).strip()
+            email = str(row.get('email') or '').strip()
+            city = str(row.get('city') or '').strip()
+            language = str(row.get('language') or 'en').strip()
+            customer_type = str(row.get('customerType') or '').strip()
+            notes = str(row.get('notes') or '').strip()
             due_date = row.get('dueDate')
             appointment_date = row.get('appointmentDate')
 
@@ -298,12 +298,12 @@ class CustomerUploadView(APIView):
                     business_id=user.business_id,
                     full_name=full_name,
                     phone=phone,
-                    email=email if email and email != 'nan' else None,
-                    city=city if city and city != 'nan' else None,
+                    email=email if email and email not in ['nan', 'None'] else None,
+                    city=city if city and city not in ['nan', 'None'] else None,
                     language=lang_clean,
-                    customer_type=customer_type if customer_type and customer_type != 'nan' else None,
+                    customer_type=customer_type if customer_type and customer_type not in ['nan', 'None'] else None,
                     tags=tags_str,
-                    notes=notes if notes and notes != 'nan' else None,
+                    notes=notes if notes and notes not in ['nan', 'None'] else None,
                     due_date=parse_date_string(due_date),
                     appointment_date=parse_date_string(appointment_date),
                     consent_status='granted',

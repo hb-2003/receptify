@@ -114,6 +114,8 @@ class TwilioCallStatusView(APIView):
         except Call.DoesNotExist:
             return HttpResponse("Call not found", status=404)
 
+        old_status = call.status
+
         # Fetch and decrypt credentials to validate signature
         try:
             credentials = TwilioCredentials.objects.get(business_id=call.campaign.business_id)
@@ -169,13 +171,13 @@ class TwilioCallStatusView(APIView):
 
         call.save()
 
-        # Update parent Campaign stats atomically when a call resolves
-        if new_status in ["completed", "failed"]:
+        # Update parent Campaign stats atomically when a call resolves for the first time
+        if old_status not in ["completed", "failed"] and new_status in ["completed", "failed"]:
             campaign = call.campaign
             campaign.calls_completed = F("calls_completed") + 1
-            if call.outcome in ["completed", "answered"]:
+            if call_status == "completed":
                 campaign.calls_answered = F("calls_answered") + 1
-            elif call.outcome in ["failed", "no_answer", "busy", "canceled"]:
+            else:
                 campaign.calls_failed = F("calls_failed") + 1
             campaign.save()
 

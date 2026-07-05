@@ -69,8 +69,8 @@ async def dial_customer(call, campaign, account_sid, auth_token, from_phone, sem
             twilio_url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json"
             
             # Construct base URLs pointing back to our own public endpoints
-            twiml_callback = f"https://receptify.in/api/v1/voice/twiml/{call.id}"
-            status_callback = f"https://receptify.in/api/v1/voice/status/{call.id}"
+            twiml_callback = f"https://receptify.in/api/calls/{call.id}/twiml"
+            status_callback = f"https://receptify.in/api/calls/{call.id}/status"
             
             payload = {
                 "From": from_phone,
