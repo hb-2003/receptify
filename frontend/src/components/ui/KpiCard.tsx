@@ -25,6 +25,8 @@ export function KpiCard({
     danger: { bg: 'bg-red-50', text: 'text-red-600' },
   }[accent] || { bg: 'bg-brand-50', text: 'text-brand-600' };
 
+  const isZero = value === 0 || value === '0' || value === '0%' || value === '0.0%' || !value;
+
   return (
     <div className={cn('bg-white border border-line rounded-xl p-5 hover:shadow-card-hover transition-shadow', className)} data-testid={testId}>
       <div className="flex items-start justify-between mb-2">
@@ -35,7 +37,15 @@ export function KpiCard({
           </div>
         )}
       </div>
-      <div className="text-[28px] leading-none font-bold text-ink mt-2" style={{ letterSpacing: '-0.02em' }}>{value}</div>
+      <div 
+        className={cn(
+          "text-[28px] leading-none mt-2 transition-all", 
+          isZero ? "text-slate-300 font-semibold" : "text-ink font-extrabold"
+        )} 
+        style={{ letterSpacing: '-0.02em' }}
+      >
+        {value}
+      </div>
       {trend && <div className={cn('text-xs mt-2', trendColor)}>{trend}</div>}
     </div>
   );
