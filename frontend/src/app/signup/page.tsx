@@ -6,17 +6,42 @@ import { useRouter } from 'next/navigation';
 import { Logo } from '@/components/ui/Logo';
 import { 
   ArrowRight, Sparkles, Building2, User, Mail, Lock, 
-  Phone, MapPin, Loader2, ShieldCheck, Zap 
+  Phone, MapPin, Loader2, ShieldCheck, Zap, PhoneCall 
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 
 // Developer-friendly toggle for production gating
-const SHOW_DEMO_CREDENTIALS = process.env.NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS !== 'false';
+const SHOW_DEMO_CREDENTIALS = process.env.NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS === 'true';
 
 const BIZ_TYPES = [
   'Clinic / Healthcare', 'NBFC / Finance', 'Diagnostic Lab', 'Real Estate',
   'Coaching / Ed-tech', 'Gym / Fitness', 'D2C Brand', 'Local Service Business', 'Other',
 ];
+
+const TICKER_ITEMS = [
+  { textPrefix: '✓ EMI reminder answered · Surat · ', textSuffix: ' ago', num: '12s' },
+  { textPrefix: '↻ Callback scheduled · Pune · ', textSuffix: ' ago', num: '34s' },
+  { textPrefix: '✓ Appointment confirmed · Bengaluru · ', textSuffix: ' ago', num: '1m' },
+];
+
+function MiniCallTicker() {
+  return (
+    <div className="w-full bg-white/40 backdrop-blur-md border-t border-[#E7E4DC] py-2 overflow-hidden select-none absolute bottom-0 left-0 right-0 z-20">
+      <div className="flex whitespace-nowrap gap-12 animate-marquee-slow">
+        {Array.from({ length: 4 }).flatMap(() => TICKER_ITEMS).map((item, idx) => (
+          <div key={idx} className="flex items-center gap-2 text-[10px] font-semibold text-[#64748B]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#2F5CFF] shadow-[0_0_6px_rgba(47,92,255,0.4)] animate-pulse" />
+            <span>{item.textPrefix}</span>
+            <span className="font-mono text-[#2F5CFF] font-bold">{item.num}</span>
+            <span>{item.textSuffix}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -34,7 +59,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const update = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Auto-fills demo credentials for smooth, rapid sandbox testing (Staging Sandbox)
+  // Auto-fills demo credentials for staging
   const handleAutoFillDemo = () => {
     setForm({
       ownerName: 'Jane Sandbox',
@@ -47,7 +72,7 @@ export default function SignupPage() {
       city: 'Bangalore',
       preferredLanguage: 'en',
     });
-    toast.success('Staging credentials loaded! Click Get started now to register.');
+    toast.success('Staging credentials loaded! Click Sign Up now to register.');
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -83,36 +108,53 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="min-h-screen grid grid-cols-1 lg:grid-cols-2 font-sans bg-[#FAFAFA]" data-testid="signup-page">
+    <main className="min-h-screen grid grid-cols-1 lg:grid-cols-2 font-sans bg-white relative overflow-y-auto" data-testid="signup-page">
       
+      {/* Self-contained CSS animations */}
+      <style>{`
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-marquee-slow {
+          animation: marquee 25s linear infinite;
+        }
+      `}</style>
+
       {/* ========================================================================= */}
-      {/* LEFT SIDE: CLEAN & MINIMAL FORM (50% Symmetrical Split) */}
+      {/* LEFT SIDE: AUTH FORM PANEL (50% Split)                                     */}
       {/* ========================================================================= */}
-      <div className="flex flex-col p-8 sm:p-12 lg:px-16 bg-white min-h-screen justify-between">
+      <div className="flex flex-col justify-between p-8 sm:p-12 lg:p-16 bg-[#FAFAF7] min-h-screen relative z-10">
         
-        {/* Top Header with Logo & Pill */}
-        <div className="flex items-center gap-3 mb-8">
-          <Link href="/"><Logo /></Link>
-          <span className="inline-flex items-center px-2 py-0.5 rounded bg-[#4F63F6]/5 border border-[#4F63F6]/10 text-[9px] font-bold text-[#4F63F6] tracking-wider uppercase">
-            AI VOICE PLATFORM
+        {/* Header (Logo + Tagline chip) */}
+        <div className="flex items-center gap-3">
+          <Link href="/" className="inline-block hover:opacity-90 transition-opacity">
+            <Logo className="text-[20px]" />
+          </Link>
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#2F5CFF]/10 text-[#2F5CFF] uppercase tracking-wider">
+            AI Voice Platform
           </span>
         </div>
 
-        {/* Centralised Form */}
-        <div className="max-w-md w-full mx-auto flex-1 flex flex-col justify-center">
+        {/* Centralised Form Container */}
+        <div className="max-w-md w-full mx-auto my-auto space-y-6 py-8">
           
-          {/* Form Header */}
-          <div className="space-y-1.5 mb-6">
-            <h1 className="text-4xl font-extrabold text-[#0F172A] tracking-tight">Create your account</h1>
-            <p className="text-xs text-[#64748B]">No credit card required · 50 free calls included</p>
+          {/* Headline */}
+          <div className="space-y-1.5">
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-[#0F172A] tracking-tight leading-none">
+              Create your account
+            </h1>
+            <p className="text-sm text-[#64748B]">
+              No credit card required · 50 free calls included
+            </p>
           </div>
 
-          {/* Staging Sandbox try demo */}
+          {/* Sandbox trial auto-fill widget */}
           {SHOW_DEMO_CREDENTIALS && (
-            <div className="p-4 rounded-xl border border-dashed border-[#4F63F6]/30 bg-[#4F63F6]/5 flex gap-4 items-center justify-between shadow-sm mb-6">
+            <div className="p-4 rounded-xl border border-dashed border-[#2F5CFF]/30 bg-[#2F5CFF]/5 flex gap-4 items-center justify-between shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#4F63F6]/10 flex items-center justify-center text-[#4F63F6] flex-shrink-0">
-                  <Zap className="w-4.5 h-4.5 fill-[#4F63F6]" />
+                <div className="w-9 h-9 rounded-xl bg-[#2F5CFF]/10 flex items-center justify-center text-[#2F5CFF] flex-shrink-0">
+                  <Zap className="w-4.5 h-4.5 fill-[#2F5CFF]" />
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-[#0F172A]">Staging Sandbox</h4>
@@ -122,14 +164,13 @@ export default function SignupPage() {
               <button 
                 type="button" 
                 onClick={handleAutoFillDemo}
-                className="px-3.5 py-1.5 bg-white border border-[#E2E8F0] text-xs font-bold text-[#4F63F6] rounded-lg shadow-sm hover:bg-[#4F63F6] hover:text-white transition-all cursor-pointer select-none"
+                className="px-3.5 py-1.5 bg-white border border-[#E2E8F0] text-xs font-bold text-[#2F5CFF] rounded-lg shadow-sm hover:bg-[#2F5CFF] hover:text-white transition-all cursor-pointer select-none"
               >
                 Try Demo
               </button>
             </div>
           )}
 
-          {/* Form Fields */}
           <form onSubmit={submit} className="space-y-4">
             
             {/* Owner name & Business name */}
@@ -142,7 +183,7 @@ export default function SignupPage() {
                     required 
                     value={form.ownerName} 
                     onChange={(e) => update('ownerName', e.target.value)} 
-                    className="w-full h-12 bg-white border border-[#E2E8F0] rounded-[10px] px-3.5 pl-11 text-sm text-[#0F172A] placeholder:text-slate-400 outline-none transition-all focus:border-[#4F63F6] focus:ring-2 focus:ring-[#4F63F6]/10" 
+                    className="input-field pl-11 h-11 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10" 
                     placeholder="John Doe" 
                   />
                 </div>
@@ -155,7 +196,7 @@ export default function SignupPage() {
                     required 
                     value={form.businessName} 
                     onChange={(e) => update('businessName', e.target.value)} 
-                    className="w-full h-12 bg-white border border-[#E2E8F0] rounded-[10px] px-3.5 pl-11 text-sm text-[#0F172A] placeholder:text-slate-400 outline-none transition-all focus:border-[#4F63F6] focus:ring-2 focus:ring-[#4F63F6]/10" 
+                    className="input-field pl-11 h-11 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10" 
                     placeholder="Acme Corp" 
                   />
                 </div>
@@ -172,7 +213,7 @@ export default function SignupPage() {
                   type="email" 
                   value={form.email} 
                   onChange={(e) => update('email', e.target.value)} 
-                  className="w-full h-12 bg-white border border-[#E2E8F0] rounded-[10px] px-3.5 pl-11 text-sm text-[#0F172A] placeholder:text-slate-400 outline-none transition-all focus:border-[#4F63F6] focus:ring-2 focus:ring-[#4F63F6]/10" 
+                  className="input-field pl-11 h-11 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10" 
                   placeholder="john@acme.com" 
                 />
               </div>
@@ -188,7 +229,7 @@ export default function SignupPage() {
                     required 
                     value={form.phone} 
                     onChange={(e) => update('phone', e.target.value)} 
-                    className="w-full h-12 bg-white border border-[#E2E8F0] rounded-[10px] px-3.5 pl-11 text-sm text-[#0F172A] placeholder:text-slate-400 outline-none transition-all focus:border-[#4F63F6] focus:ring-2 focus:ring-[#4F63F6]/10" 
+                    className="input-field pl-11 h-11 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10" 
                     placeholder="+91 98765 43210" 
                   />
                 </div>
@@ -201,34 +242,34 @@ export default function SignupPage() {
                     required 
                     value={form.city} 
                     onChange={(e) => update('city', e.target.value)} 
-                    className="w-full h-12 bg-white border border-[#E2E8F0] rounded-[10px] px-3.5 pl-11 text-sm text-[#0F172A] placeholder:text-slate-400 outline-none transition-all focus:border-[#4F63F6] focus:ring-2 focus:ring-[#4F63F6]/10" 
+                    className="input-field pl-11 h-11 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10" 
                     placeholder="Mumbai" 
                   />
                 </div>
               </div>
             </div>
 
-            {/* Business type */}
+            {/* Business type select */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wide">Business type</label>
               <select 
                 value={form.businessType} 
                 onChange={(e) => update('businessType', e.target.value)} 
-                className="w-full h-12 bg-white border border-[#E2E8F0] rounded-[10px] px-3.5 text-sm text-[#0F172A] outline-none transition-all focus:border-[#4F63F6] focus:ring-2 focus:ring-[#4F63F6]/10 cursor-pointer"
+                className="input-field h-11 px-3.5 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10 cursor-pointer"
               >
                 {BIZ_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
 
-            {/* Dynamic custom business type field */}
+            {/* Dynamic custom specifying business type input */}
             {form.businessType === 'Other' && (
-              <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
-                <label className="text-xs font-bold text-[#4F63F6] uppercase tracking-wide">Please specify</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#2F5CFF] uppercase tracking-wide">Please specify</label>
                 <input 
                   required 
                   value={form.customBusinessType} 
                   onChange={(e) => update('customBusinessType', e.target.value)} 
-                  className="w-full h-12 bg-[#4F63F6]/5 border border-[#4F63F6]/30 rounded-[10px] px-3.5 text-sm text-[#0F172A] placeholder:text-slate-400 outline-none transition-all focus:border-[#4F63F6]" 
+                  className="input-field h-11 border-[#2F5CFF]/30 bg-[#2F5CFF]/5 transition-all focus:border-[#2F5CFF]" 
                   placeholder="e.g. Logistics, E-commerce..." 
                 />
               </div>
@@ -246,7 +287,7 @@ export default function SignupPage() {
                     type="password" 
                     value={form.password} 
                     onChange={(e) => update('password', e.target.value)} 
-                    className="w-full h-12 bg-white border border-[#E2E8F0] rounded-[10px] px-3.5 pl-11 text-sm text-[#0F172A] placeholder:text-slate-400 outline-none transition-all focus:border-[#4F63F6] focus:ring-2 focus:ring-[#4F63F6]/10" 
+                    className="input-field pl-11 h-11 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10" 
                     placeholder="Min 8 chars" 
                   />
                 </div>
@@ -256,125 +297,123 @@ export default function SignupPage() {
                 <select 
                   value={form.preferredLanguage} 
                   onChange={(e) => update('preferredLanguage', e.target.value)} 
-                  className="w-full h-12 bg-white border border-[#E2E8F0] rounded-[10px] px-3.5 text-sm text-[#0F172A] outline-none transition-all focus:border-[#4F63F6] focus:ring-2 focus:ring-[#4F63F6]/10 cursor-pointer"
+                  className="input-field h-11 px-3.5 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10 cursor-pointer"
                 >
                   <option value="en">English (EN)</option>
                 </select>
               </div>
             </div>
 
-            {/* Submit Button */}
+            {/* Primary Submit CTA button */}
             <button 
               type="submit" 
               disabled={loading} 
-              className="w-full h-12 bg-[#4F63F6] hover:bg-[#3949D5] hover:-translate-y-0.5 active:translate-y-0 text-white font-semibold rounded-lg text-sm transition-all flex items-center justify-center gap-2 mt-6 cursor-pointer select-none shadow-md shadow-[#4F63F6]/15" 
+              className="w-full h-11 bg-[#2F5CFF] hover:bg-[#1D4ED8] text-white text-xs font-mono font-bold uppercase tracking-widest rounded-lg shadow-sm transition-all duration-200 inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-4" 
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" /> Setting up account...
                 </>
               ) : (
-                <>Get started now <ArrowRight className="w-4.5 h-4.5" /></>
+                <>
+                  <span>Create Account</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
               )}
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="relative flex py-2 items-center my-4">
-            <div className="flex-grow border-t border-[#E2E8F0]" />
-            <span className="flex-shrink mx-4 text-slate-400 text-xs uppercase font-semibold tracking-wider">or</span>
-            <div className="flex-grow border-t border-[#E2E8F0]" />
-          </div>
-
-          {/* Secondary Google Button */}
-          <button
-            type="button"
-            onClick={() => toast.info('Google Sign-In is pre-configured on staging.')}
-            className="w-full h-12 bg-white border border-[#E2E8F0] text-slate-700 rounded-lg text-sm font-semibold flex items-center justify-center gap-2.5 transition-all hover:bg-slate-50 active:scale-[0.99] shadow-sm cursor-pointer select-none"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.18 1-.78 1.85-1.63 2.42v2.01h2.64c1.54-1.42 2.63-3.5 2.63-5.44z" fill="#4285F4" />
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.52-2.01c-.97.65-2.23 1.04-3.76 1.04-2.87 0-5.3-1.94-6.16-4.54H1.14v2.07C2.96 20.31 7.18 23 12 23z" fill="#34A853" />
-              <path d="M5.84 14.83a6.5 6.5 0 010-4.14V8.62H1.14a11.95 11.95 0 000 10.76l4.7-2.55z" fill="#FBBC05" />
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.18 1 2.96 3.69 1.14 8.62l4.7 2.55c.86-2.6 3.3-4.54 12-4.54z" fill="#EA4335" />
-            </svg>
-            Sign up with Google
-          </button>
-
-          {/* Footer Link */}
-          <div className="text-center text-xs text-[#64748B] mt-6">
+          {/* Sibling login link */}
+          <div className="text-center text-xs text-slate-500 pt-1">
             Already have an account?{' '}
-            <Link href="/login" className="text-[#4F63F6] font-bold hover:underline" data-testid="signup-login-link">
+            <Link href="/login" className="text-[#2F5CFF] font-bold hover:underline" data-testid="signup-login-link">
               Sign in
             </Link>
           </div>
 
         </div>
 
-        {/* Symmetrical Bottom Trust Row */}
-        <div className="text-center lg:text-left text-[11px] text-[#64748B] border-t border-[#E2E8F0] pt-5 mt-8 flex items-center justify-between">
-          <p>© 2026 Receptify</p>
+        {/* Symmetrical footer */}
+        <div className="text-center lg:text-left text-[11px] text-[#64748B] border-t border-[#E7E4DC] pt-5 flex items-center justify-between">
+          <p>© {new Date().getFullYear()} Receptify</p>
           <div className="flex gap-1.5 items-center">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
             <span>🔒 SOC2 Compliant · ISO 27001</span>
           </div>
         </div>
-
       </div>
 
       {/* ========================================================================= */}
-      {/* RIGHT SIDE: MINIMAL BRANDING PANEL (Notion, Stripe, Linear style)        */}
+      {/* RIGHT SIDE: COMPOSED MINI-DASHBOARD MOMENT (Branding Panel) (50% Split)    */}
       {/* ========================================================================= */}
-      <div className="hidden lg:flex flex-col justify-center items-center p-16 bg-gradient-to-br from-[#F5F7FF] to-[#EDEFFC] relative overflow-hidden border-l border-[#E2E8F0]">
+      <div className="hidden lg:flex flex-col justify-center items-center p-16 bg-[#FBFAF7] relative overflow-hidden border-l border-[#E7E4DC]">
         
-        {/* Large, very subtle geometric shape at extremely low opacity (5-8%) for depth only */}
-        <div className="absolute w-[450px] h-[450px] bg-brand-500/[0.06] rounded-full blur-[80px] pointer-events-none" />
+        {/* Subtle dotgrid background texture */}
+        <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(#2F5CFF_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none" />
+        
+        {/* Soft radial glow directly behind the card mockup */}
+        <div className="absolute w-[450px] h-[450px] bg-[#2F5CFF]/[0.08] rounded-full blur-[80px] pointer-events-none z-0" />
 
-        {/* Airy Centerpiece Content Container */}
-        <div className="relative z-10 flex flex-col items-center">
+        {/* Composed Sibling Card Group (Vertically Centered) */}
+        <div className="relative z-10 flex flex-col items-center w-full max-w-sm">
           
-          {/* Centered Single Focal Card */}
-          <div className="bg-white border border-[#E2E8F0] rounded-2xl p-8 shadow-xl shadow-brand-900/[0.04] w-80">
-            <div className="flex flex-col items-center text-center">
+          {/* Sibling Value Showcase Card */}
+          <div className="bg-white border border-[#E7E4DC] rounded-2xl p-7 shadow-[0_20px_50px_rgba(47,92,255,0.04)] w-80 relative overflow-hidden transition-all duration-300 hover:border-[#2F5CFF]/30">
+            <div className="flex flex-col items-center">
               
-              {/* Setting Up Status Pill */}
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-bold text-[#4F63F6] uppercase tracking-wider mb-4">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4F63F6] opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#4F63F6]"></span>
-                </span>
-                Setting Up
+              {/* Included Pill Status */}
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#2F5CFF]/10 border border-[#2F5CFF]/20 text-[10px] font-bold text-[#2F5CFF] uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5" />
+                Included
               </div>
 
-              {/* Purple/Indigo Gradient square with Sparkle Icon */}
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#4F63F6] to-indigo-400 flex items-center justify-center text-white shadow-lg shadow-[#4F63F6]/15 mb-4">
-                <Sparkles className="w-6 h-6" />
+              {/* Blue Rounded Square Voice/Phone Icon */}
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-[#2F5CFF] to-blue-400 flex items-center justify-center text-white shadow-md shadow-[#2F5CFF]/15 mt-4 mb-3">
+                <Sparkles className="w-5.5 h-5.5 animate-pulse" />
               </div>
 
               {/* Card Titles */}
-              <h3 className="font-bold text-[#0D1B3E] text-base">Account Setup</h3>
-              <p className="text-xs text-slate-500 mt-1">Initializing AI workspace</p>
+              <h3 className="font-extrabold text-[#0B1220] text-base">Here&apos;s what you get</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Staged AI Sandbox Account</p>
 
-              {/* Single thin progress bar under the text */}
-              <div className="w-full mt-6">
-                <div className="h-1 bg-slate-100 rounded-full w-full overflow-hidden">
-                  <div className="h-full bg-[#4F63F6] w-2/3 rounded-full animate-pulse" />
+              {/* Sibling quantitative stats inside the card container (91% / 4,200+ / 68%) */}
+              <div className="border-t border-[#E7E4DC]/80 mt-6 pt-5 w-full">
+                <div className="grid grid-cols-3 gap-2 w-full text-center">
+                  <div>
+                    <div className="text-xs font-mono font-bold text-[#2F5CFF]">91%</div>
+                    <div className="text-[9px] text-slate-400 uppercase font-bold mt-0.5 leading-none">Pick-up</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-mono font-bold text-[#2F5CFF]">4,200+</div>
+                    <div className="text-[9px] text-slate-400 uppercase font-bold mt-0.5 leading-none">Calls/Day</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-mono font-bold text-[#2F5CFF]">68%</div>
+                    <div className="text-[9px] text-slate-400 uppercase font-bold mt-0.5 leading-none">Reached</div>
+                  </div>
                 </div>
               </div>
 
             </div>
           </div>
 
-          {/* Minimal Plain Text Stat Row */}
-          <div className="mt-8 text-xs text-slate-400 font-medium flex items-center justify-center gap-3">
-            <span>50 free calls</span>
-            <span className="text-slate-300">•</span>
-            <span>No credit card</span>
-            <span className="text-slate-300">•</span>
-            <span>2-min setup</span>
+          {/* Sibling outcome value badges below the card */}
+          <div className="flex flex-wrap items-center justify-center gap-1.5 mt-6 relative z-10">
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-semibold font-mono badge-completed">
+              No Card Needed
+            </span>
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-semibold font-mono badge-active">
+              Localized Accents
+            </span>
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-semibold font-mono badge-warning">
+              50 Free Calls
+            </span>
           </div>
 
         </div>
+
+        {/* Condensed version of the live call ticker strip along the bottom edge */}
+        <MiniCallTicker />
 
       </div>
     </main>

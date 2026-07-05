@@ -101,7 +101,7 @@ class CampaignDetailView(APIView):
         customers = Customer.objects.filter(id__in=customer_ids)
 
         # Get call history for this campaign
-        calls = Call.objects.filter(campaign_id=id).order_by('-created_at')
+        calls = Call.objects.filter(campaign_id=id).select_related('customer', 'campaign').order_by('-created_at')
 
         # Serializations
         campaign_serializer = CampaignSerializer(campaign)
@@ -154,6 +154,12 @@ class CampaignLaunchView(APIView):
                 if not campaign_customers.exists():
                     return Response({'error': 'Cannot launch a campaign with no contacts. Please add customers to this campaign first.'}, status=status.HTTP_400_BAD_REQUEST)
 
+                # Validate that the business has sufficient call credits
+                contacts_count = campaign_customers.count()
+                if not user.business or user.business.call_credits < contacts_count:
+                    available_credits = user.business.call_credits if user.business else 0
+                    return Response({'error': f'Insufficient call credits. You need at least {contacts_count} credits, but only have {available_credits} left.'}, status=status.HTTP_400_BAD_REQUEST)
+
                 # Set campaign status to scheduled and use Live Twilio channel type
                 campaign.status = 'scheduled'
                 campaign.channel_type = 1
@@ -162,6 +168,11 @@ class CampaignLaunchView(APIView):
                 campaign.calls_answered = 0
                 campaign.calls_failed = 0
                 campaign.save()
+
+                # Deduct calling credits atomically from the business balance
+                business = user.business
+                business.call_credits = F('call_credits') - contacts_count
+                business.save()
 
                 # Generate initial queued calls for poller processing
                 queued_calls = []
@@ -181,8 +192,14 @@ class CampaignLaunchView(APIView):
                 # Bulk save call records atomically
                 Call.objects.bulk_create(queued_calls)
 
+            # Kick off the live background dialer thread immediately after committing the transaction
+            import threading
+            from campaigns.dialer import run_live_campaign_dialer
+            thread = threading.Thread(target=run_live_campaign_dialer, args=(campaign.id,), daemon=True)
+            thread.start()
+
         except Campaign.DoesNotExist:
-            return Response({'error': 'Not found'}, status=status.HTTP_444_NOT_FOUND if False else status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = CampaignSerializer(campaign)
         return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_200_OK)
