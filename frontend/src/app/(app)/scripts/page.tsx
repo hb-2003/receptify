@@ -8,6 +8,22 @@ import { PURPOSE_LABEL } from '@/lib/utils';
 
 const PURPOSES = Object.entries(PURPOSE_LABEL);
 
+const CUSTOMER_TYPES = [
+  { value: 'customer', label: 'General Customer' },
+  { value: 'patient', label: 'Patient / Clinic Guest' },
+  { value: 'borrower', label: 'Borrower / EMI Client' },
+  { value: 'member', label: 'Gym Member / Fitness Client' },
+  { value: 'lead', label: 'Prospect / Site Lead' },
+  { value: 'buyer', label: 'Buyer / Retail Customer' },
+];
+
+const DYNAMIC_VARIABLES = [
+  { value: 'customer_name', label: '[Customer Name]' },
+  { value: 'amount_due', label: '[Amount Due]' },
+  { value: 'due_date', label: '[Due Date]' },
+  { value: 'appointment_date', label: '[Appointment Date]' },
+];
+
 const VARIABLES = [
   { value: 'customer_name', label: '[Customer Name]', color: 'blue' },
   { value: 'amount_due', label: '[Amount Due]', color: 'emerald' },
@@ -35,6 +51,7 @@ export default function ScriptGeneratorPage() {
   const [result, setResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showSampleData, setShowSampleData] = useState(false);
+  const [showVarsDropdown, setShowVarsDropdown] = useState(false);
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -91,7 +108,7 @@ export default function ScriptGeneratorPage() {
     }, 0);
   };
 
-  const handleCustomVariableAdd = () => {
+  const handleCustomVariablePrompt = () => {
     const customName = prompt("Enter custom variable name (e.g. Due Amount, Token Number):");
     if (!customName) return;
     
@@ -128,17 +145,29 @@ export default function ScriptGeneratorPage() {
       return;
     }
     
-    // Package what the user typed directly into fullScript response schema
+    const text = form.call_goal;
+    const closingText = form.include_opt_out 
+      ? "Thank you. This call was made in compliance with TRAI guidelines. To stop receiving these promotional alerts, please press 9 to opt-out." 
+      : "Thank you for your time. Goodbye.";
+    const full = `Hello, this is ${form.business_name || 'your company'}. ${text} ${closingText}`;
+
+    // Package both snake_case and camelCase for backward compatibility
     setResult({
-      full_script: form.call_goal,
-      opening: "Welcome / Connection greeting is integrated in your text.",
-      main_message: form.call_goal,
+      full_script: full,
+      fullScript: full,
+      opening: `Hello, this is ${form.business_name || 'your company'}.`,
+      main_message: text,
+      mainMessage: text,
       response_handling: "Politely accept response and proceed to closing.",
-      closing: form.include_opt_out ? "Thank you. This call was made in compliance with TRAI guidelines. To stop receiving these promotional alerts, please press 9 to opt-out." : "Thank you for your time. Goodbye.",
+      responseHandling: "Politely accept response and proceed to closing.",
+      closing: closingText,
       cta: form.cta || "Please respond as requested.",
-      short_version: form.call_goal.substring(0, 100) + "...",
-      polite_version: "Hello. Hope you are having a nice day. " + form.call_goal,
-      professional_version: form.call_goal
+      short_version: text.substring(0, 100) + "...",
+      shortVersion: text.substring(0, 100) + "...",
+      polite_version: "Hello. Hope you are having a nice day. " + text,
+      politeVersion: "Hello. Hope you are having a nice day. " + text,
+      professional_version: text,
+      professionalVersion: text
     });
     
     toast.success("Using your custom text as script draft!");
@@ -153,6 +182,26 @@ export default function ScriptGeneratorPage() {
     toast.success('Copied to clipboard'); 
   };
 
+  // Dynamic variable and camelCase resolver
+  const getResultKey = (res: any, key: string) => {
+    if (!res) return '—';
+    if (res[key] !== undefined) return res[key];
+
+    const camelMap: Record<string, string> = {
+      'full_script': 'fullScript',
+      'main_message': 'mainMessage',
+      'response_handling': 'responseHandling',
+      'short_version': 'shortVersion',
+      'polite_version': 'politeVersion',
+      'professional_version': 'professionalVersion',
+    };
+
+    const cKey = camelMap[key];
+    if (cKey && res[cKey] !== undefined) return res[cKey];
+
+    return '—';
+  };
+
   // Safe variables highlighting preview parser
   const renderPreview = (text: string) => {
     if (!text) {
@@ -164,6 +213,11 @@ export default function ScriptGeneratorPage() {
       '[Amount Due]': showSampleData ? '₹1200' : '[Amount Due]',
       '[Due Date]': showSampleData ? '15 Feb' : '[Due Date]',
       '[Appointment Date]': showSampleData ? '12 July' : '[Appointment Date]',
+      '[Email]': showSampleData ? 'patient@gmail.com' : '[Email]',
+      '[City]': showSampleData ? 'Mumbai' : '[City]',
+      '[Customer Type]': showSampleData ? 'Patient' : '[Customer Type]',
+      '[Notes]': showSampleData ? 'Regular dental checkup needed' : '[Notes]',
+      '[Consent Status]': showSampleData ? 'Granted' : '[Consent Status]',
     };
 
     // Regex to split text by bracketed variables
@@ -182,6 +236,11 @@ export default function ScriptGeneratorPage() {
         return <span key={index} className="px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 font-bold border border-purple-200 inline-block text-xs mx-0.5">{replacements[part]}</span>;
       }
       
+      // Standard metadata fields highlighting
+      if (part === '[Email]' || part === '[City]' || part === '[Customer Type]' || part === '[Notes]' || part === '[Consent Status]') {
+        return <span key={index} className="px-2 py-0.5 rounded-lg bg-slate-50 text-slate-700 font-bold border border-slate-200 inline-block text-xs mx-0.5">{replacements[part]}</span>;
+      }
+
       // Handle custom user-created bracketed variables
       if (part.startsWith('[') && part.endsWith(']')) {
         return <span key={index} className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-bold border border-slate-300 inline-block text-xs mx-0.5">{part}</span>;
@@ -237,7 +296,7 @@ export default function ScriptGeneratorPage() {
             </div>
 
             {/* Variable Chips Row */}
-            <div className="flex flex-wrap gap-1.5 p-1 bg-slate-50 rounded-2xl border border-slate-200/60">
+            <div className="flex flex-wrap gap-1.5 p-1 bg-slate-50 rounded-2xl border border-slate-200/60 relative">
               {VARIABLES.map((v) => (
                 <button
                   key={v.value}
@@ -253,12 +312,47 @@ export default function ScriptGeneratorPage() {
                   {v.label}
                 </button>
               ))}
-              <button
-                onClick={handleCustomVariableAdd}
-                className="px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-500 bg-white hover:bg-slate-50 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Variable
-              </button>
+              
+              {/* Dropdown variables menu container */}
+              <div className="relative inline-block">
+                <button
+                  onClick={() => setShowVarsDropdown(!showVarsDropdown)}
+                  className="px-3 py-1.5 rounded-xl border border-dashed border-slate-300 text-slate-500 bg-white hover:bg-slate-50 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Variable
+                </button>
+                
+                {showVarsDropdown && (
+                  <div className="absolute left-0 mt-1.5 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1 space-y-0.5 animate-in fade-in-50 slide-in-from-top-1 duration-200">
+                    <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 px-2.5 py-1">Available Fields</span>
+                    {[
+                      { label: '[Email]', value: 'email' },
+                      { label: '[City]', value: 'city' },
+                      { label: '[Customer Type]', value: 'customer_type' },
+                      { label: '[Notes]', value: 'notes' },
+                      { label: '[Consent Status]', value: 'consent_status' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => {
+                          insertVariable(opt.label, opt.value);
+                          setShowVarsDropdown(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                    <div className="border-t border-slate-100 my-1" />
+                    <button
+                      onClick={handleCustomVariablePrompt}
+                      className="w-full text-left px-2.5 py-1.5 text-[11px] font-bold text-[#2F5CFF] hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Custom Field...
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Main Textarea */}
@@ -325,8 +419,8 @@ export default function ScriptGeneratorPage() {
             </button>
             <button 
               onClick={generate} 
-              disabled={isLoading || !form.business_name} 
-              className="px-4 h-11 bg-[#2F5CFF] hover:bg-[#1D4ED8] text-white text-xs font-bold uppercase rounded-xl shadow-lg shadow-[#2F5CFF]/15 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 disabled:opacity-50" 
+              disabled={isLoading} 
+              className="btn-primary w-full mt-6 sticky bottom-0 shadow-lg" 
               data-testid="sg-generate-button"
             >
               {isLoading ? (
@@ -388,7 +482,7 @@ export default function ScriptGeneratorPage() {
                         {label}
                       </h4>
                       <button 
-                        onClick={() => copy(result[k] || '')} 
+                        onClick={() => copy(getResultKey(result, k))} 
                         className={cn(
                           "text-xs font-mono font-bold uppercase tracking-wider inline-flex items-center gap-1.5 hover:underline", 
                           highlight ? "text-[#2F5CFF]" : "text-brand-600"
@@ -404,7 +498,7 @@ export default function ScriptGeneratorPage() {
                         ? "font-mono italic text-slate-100" 
                         : "text-slate-600 font-medium"
                     )}>
-                      {highlight ? `\u201C${result[k] || '—'}\u201D` : result[k] || '—'}
+                      {highlight ? `\u201C${getResultKey(result, k) || '—'}\u201D` : getResultKey(result, k) || '—'}
                     </p>
                   </div>
                 ))}
