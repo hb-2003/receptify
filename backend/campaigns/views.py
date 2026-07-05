@@ -194,7 +194,7 @@ class CampaignLaunchView(APIView):
             thread.start()
 
         except Campaign.DoesNotExist:
-            return Response({'error': 'Not found'}, status=status.HTTP_444_NOT_FOUND if False else status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = CampaignSerializer(campaign)
         return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_200_OK)
