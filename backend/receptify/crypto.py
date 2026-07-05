@@ -6,7 +6,6 @@ def get_encryption_key() -> bytes:
     secret = config('ENCRYPTION_KEY', default='')
     if not secret:
         # Fallback key matching TypeScript: crypto.scryptSync('development_fallback_key_receptify', 'salt', 32)
-        # In Python, we can do scrypt derivation:
         import hashlib
         try:
             return hashlib.scrypt(
@@ -28,9 +27,11 @@ def get_encryption_key() -> bytes:
                 p=1
             )
     
-    # Ensure key is exactly 32 bytes via padding or slicing (matches TypeScript logic)
-    padded_secret = secret.ljust(32, '0')[:32]
-    return padded_secret.encode('utf-8')
+    # Ensure key is exactly 32 bytes via padding or slicing at the byte level
+    encoded_secret = secret.encode('utf-8')
+    if len(encoded_secret) < 32:
+        return encoded_secret + b'0' * (32 - len(encoded_secret))
+    return encoded_secret[:32]
 
 def encrypt(text: str) -> str:
     key = get_encryption_key()

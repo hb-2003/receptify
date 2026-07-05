@@ -12,7 +12,6 @@ const FIELD_OPTIONS = [
   { value: 'phone', label: 'Phone *' },
   { value: 'email', label: 'Email' },
   { value: 'city', label: 'City' },
-  { value: 'language', label: 'Language' },
   { value: 'customerType', label: 'Customer Type' },
   { value: 'notes', label: 'Notes' },
   { value: 'dueDate', label: 'Due Date' },
@@ -26,7 +25,6 @@ function guessMapping(header: string): string {
   if (h.includes('phone') || h.includes('mobile')) return 'phone';
   if (h.includes('email')) return 'email';
   if (h.includes('city') || h.includes('location')) return 'city';
-  if (h.includes('lang')) return 'language';
   if (h.includes('type')) return 'customerType';
   if (h.includes('note')) return 'notes';
   if (h.includes('due')) return 'dueDate';
