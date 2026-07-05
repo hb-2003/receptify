@@ -715,7 +715,7 @@ export default function NewCampaignPage() {
         <button
           onClick={back}
           disabled={step === 1 || isSubmitting}
-          className="px-4.5 h-11 border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-mono font-bold uppercase rounded-xl transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+          className="px-6 h-11 border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-mono font-bold uppercase rounded-xl transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -724,7 +724,7 @@ export default function NewCampaignPage() {
           <button
             onClick={next}
             disabled={!canNext()}
-            className="px-4.5 h-11 bg-[#2F5CFF] hover:bg-[#1D4ED8] text-white text-xs font-mono font-bold uppercase rounded-xl transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            className="px-6 h-11 bg-[#2F5CFF] hover:bg-[#1D4ED8] text-white text-xs font-mono font-bold uppercase rounded-xl transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
             Next <ArrowRight className="w-4 h-4" />
           </button>
