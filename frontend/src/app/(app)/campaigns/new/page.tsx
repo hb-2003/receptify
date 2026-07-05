@@ -211,9 +211,6 @@ export default function NewCampaignPage() {
               <p className="text-sm text-slate-500 mt-1">AI-generated, fully editable. Use {'{{name}}'} and {'{{business}}'} placeholders.</p>
             </div>
             <div className="flex gap-2 items-center">
-              <select value={data.language} onChange={(e) => setData({ ...data, language: e.target.value as any })} className="input-field py-2" data-testid="script-language-select">
-                <option value="en">English</option>
-              </select>
               <button onClick={generateScript} disabled={isGenerating} className="btn-primary text-sm" data-testid="generate-script-button">
                 <Sparkles className="w-4 h-4" /> {isGenerating ? 'Generating…' : 'Generate with AI'}
               </button>

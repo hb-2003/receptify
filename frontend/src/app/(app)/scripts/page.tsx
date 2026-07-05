@@ -17,6 +17,13 @@ const CUSTOMER_TYPES = [
   { value: 'buyer', label: 'Buyer / Retail Customer' },
 ];
 
+const DYNAMIC_VARIABLES = [
+  { value: 'customer_name', label: '[Customer Name]' },
+  { value: 'amount_due', label: '[Amount Due]' },
+  { value: 'due_date', label: '[Due Date]' },
+  { value: 'appointment_date', label: '[Appointment Date]' },
+];
+
 export default function ScriptGeneratorPage() {
   const [business, setBusiness] = useState<any>(null);
   const [form, setForm] = useState({
@@ -29,6 +36,9 @@ export default function ScriptGeneratorPage() {
     call_goal: '',
     important_details: '',
     cta: '',
+    objection_handling: '',
+    dynamic_variables: [] as string[],
+    include_opt_out: false,
   });
   const [result, setResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -55,24 +65,36 @@ export default function ScriptGeneratorPage() {
     });
   }, []);
 
-  const labels = business?.businessType ? getTenantLabels(business.businessType) : null;
+  const handleBusinessTypeChange = (val: string) => {
+    let derivedCustType = 'customer';
+    const norm = val.toLowerCase().trim();
+    if (norm.includes('clinic')) derivedCustType = 'patient';
+    else if (norm.includes('nbfc') || norm.includes('finance')) derivedCustType = 'borrower';
+    else if (norm.includes('gym')) derivedCustType = 'member';
+    else if (norm.includes('real-estate')) derivedCustType = 'lead';
 
-  const togglePlayAudio = () => {
-    // Left empty or fallback
+    setForm((prev) => ({
+      ...prev,
+      business_type: val,
+      customer_type: derivedCustType,
+    }));
   };
 
-  const load = async () => {
-    setIsLoading(true);
-    const res = await fetch(`/api/customers`);
-    const data = await res.json();
-    setIsLoading(false);
+  const handleVariableToggle = (variable: string) => {
+    setForm((prev) => {
+      const active = prev.dynamic_variables.includes(variable)
+        ? prev.dynamic_variables.filter((v) => v !== variable)
+        : [...prev.dynamic_variables, variable];
+      return { ...prev, dynamic_variables: active };
+    });
   };
 
   const generate = async () => {
     setIsLoading(true);
     try {
       const r = await fetch('/api/scripts/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
       const d = await r.json();
@@ -112,53 +134,88 @@ export default function ScriptGeneratorPage() {
                   {PURPOSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
+
+              {/* Advanced Pre-filled Drawer */}
+              <details className="group border border-slate-200 rounded-xl overflow-hidden transition-all duration-300">
+                <summary className="flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 cursor-pointer list-none select-none">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Advanced Settings</span>
+                  <span className="text-xs text-slate-400 group-open:rotate-180 transition-transform duration-300">▼</span>
+                </summary>
+                <div className="p-4 space-y-3.5 border-t border-slate-200 bg-slate-50/50 rounded-b-2xl">
+                  <div>
+                    <label className="label-base">Business name</label>
+                    <input className="input-field" value={form.business_name} onChange={(e) => setForm({ ...form, business_name: e.target.value })} data-testid="sg-business-name-input" />
+                  </div>
+                  
+                  <div className="mt-3">
+                    <label className="label-base">Business type</label>
+                    <input className="input-field" placeholder="e.g. Clinic, NBFC, Gym" value={form.business_type} onChange={(e) => handleBusinessTypeChange(e.target.value)} data-testid="sg-business-type-input" />
+                  </div>
+                  
+                  <div className="mt-3">
+                    <label className="label-base">Customer type</label>
+                    <select 
+                      className="input-field" 
+                      value={form.customer_type} 
+                      onChange={(e) => setForm({ ...form, customer_type: e.target.value })} 
+                      data-testid="sg-customer-type-select"
+                    >
+                      {CUSTOMER_TYPES.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </details>
               
               <div>
-                <label className="label-base">Business name</label>
-                <input className="input-field" value={form.business_name} onChange={(e) => setForm({ ...form, business_name: e.target.value })} data-testid="sg-business-name-input" />
-              </div>
-              
-              <div>
-                <label className="label-base">Business type</label>
-                <input className="input-field" placeholder="e.g. Clinic, NBFC, Gym" value={form.business_type} onChange={(e) => setForm({ ...form, business_type: e.target.value })} data-testid="sg-business-type-input" />
-              </div>
-              
-              <div>
-                <label className="label-base">Customer type</label>
-                <select 
-                  className="input-field" 
-                  value={form.customer_type} 
-                  onChange={(e) => setForm({ ...form, customer_type: e.target.value })} 
-                  data-testid="sg-customer-type-select"
-                >
-                  {CUSTOMER_TYPES.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
+                <label className="label-base">Tone</label>
+                <select className="input-field" value={form.tone} onChange={(e) => setForm({ ...form, tone: e.target.value })} data-testid="sg-tone-select">
+                  <option value="professional">Professional</option>
+                  <option value="friendly">Friendly</option>
+                  <option value="polite">Polite</option>
                 </select>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="label-base">Language</label>
-                  <select className="input-field" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} data-testid="sg-language-select">
-                    <option value="en">English</option>
-                    <option value="hi">Hindi</option>
-                    <option value="gu">Gujarati</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label-base">Tone</label>
-                  <select className="input-field" value={form.tone} onChange={(e) => setForm({ ...form, tone: e.target.value })} data-testid="sg-tone-select">
-                    <option value="professional">Professional</option>
-                    <option value="friendly">Friendly</option>
-                    <option value="polite">Polite</option>
-                  </select>
-                </div>
               </div>
               
               <div>
                 <label className="label-base">Call goal</label>
                 <input className="input-field" placeholder="e.g. Remind about EMI due on 15 Feb" value={form.call_goal} onChange={(e) => setForm({ ...form, call_goal: e.target.value })} data-testid="sg-call-goal-input" />
+              </div>
+              
+              <div>
+                <label className="label-base">Objection scenarios (New)</label>
+                <textarea rows={2} className="input-field" placeholder="e.g. If patient wants to reschedule, offer slots between 10 AM and 2 PM tomorrow" value={form.objection_handling} onChange={(e) => setForm({ ...form, objection_handling: e.target.value })} data-testid="sg-objections-input" />
+              </div>
+
+              <div>
+                <label className="label-base block mb-1">Dynamic Variable Placeholders (New)</label>
+                <div className="grid grid-cols-1 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                  {DYNAMIC_VARIABLES.map((v) => (
+                    <label key={v.value} className="inline-flex items-center gap-2.5 text-xs font-semibold text-slate-700 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={form.dynamic_variables.includes(v.value)} 
+                        onChange={() => handleVariableToggle(v.value)} 
+                        className="w-4 h-4 text-[#2F5CFF] border-slate-300 rounded focus:ring-[#2F5CFF]/10 cursor-pointer" 
+                      />
+                      {v.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">TRAI Compliance (New)</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">Append 'Press 9 to opt-out' to closing</span>
+                </div>
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 text-[#2F5CFF] focus:ring-[#2F5CFF]/10 border-slate-300 rounded cursor-pointer" 
+                  checked={form.include_opt_out} 
+                  onChange={(e) => setForm({ ...form, include_opt_out: e.target.checked })} 
+                  data-testid="sg-opt-out-checkbox"
+                />
               </div>
               
               <div>
@@ -208,10 +265,10 @@ export default function ScriptGeneratorPage() {
                   PROPOSED SCRIPT SEGMENTS
                 </span>
                 {[
-                  { step: '1. Opening greeting & local identification', d: 'polite regional namaste' },
-                  { step: '2. Primary message statement', d: 'factual EMI or clinic reason' },
+                  { step: '1. Opening greeting & local identification', d: 'polite regional greeting' },
+                  { step: '2. Primary message statement', d: 'factual appointment or billing reason' },
                   { step: '3. Legal TRAI DND check & compliance', d: 'consent verification' },
-                  { step: '4. Immediate action CTA', d: 'payment link or confirm code' },
+                  { step: '4. Immediate action CTA', d: 'confirmation code or action link' },
                 ].map((item, idx) => (
                   <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-400">
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mt-1.5" />
@@ -278,13 +335,4 @@ export default function ScriptGeneratorPage() {
       </div>
     </div>
   );
-}
-
-// Inline fallback label helper for mapping types
-function getTenantLabels(type: string) {
-  const norm = type?.toLowerCase().trim();
-  if (norm === 'clinic') return { customerLabel: 'Patient' };
-  if (norm === 'gym') return { customerLabel: 'Member' };
-  if (norm === 'nbfc' || norm === 'finance') return { customerLabel: 'Borrower' };
-  return { customerLabel: 'Customer' };
 }
