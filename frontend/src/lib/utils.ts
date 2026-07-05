@@ -37,6 +37,8 @@ export const PURPOSE_LABEL: Record<string, string> = {
 
 export const LANGUAGE_LABEL: Record<string, string> = {
   en: 'English',
+  hi: 'Hindi',
+  gu: 'Gujarati',
 };
 
 export function formatDate(d: Date | string): string {

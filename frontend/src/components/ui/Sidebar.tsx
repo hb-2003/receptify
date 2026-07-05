@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Users, Megaphone, PlusCircle, Sparkles, History,
   Mic, FileText, BarChart3, FileStack, ShieldCheck, CreditCard, Settings, HelpCircle, LogOut,
@@ -75,11 +75,52 @@ SidebarFooter.displayName = "SidebarFooter";
 export function Sidebar({ user, business }: { user?: { ownerName: string; email: string }; business?: { name: string; planTier?: string } }) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [activeCount, setActiveCount] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    let isSubscribed = true;
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/analytics');
+        if (res.ok) {
+          const d = await res.json();
+          if (isSubscribed && d?.totals) {
+            setActiveCount(d.totals.activeCampaigns || 0);
+          }
+        }
+      } catch (err) {}
+    };
+    fetchStats();
+    const timer = setInterval(fetchStats, 5000);
+    return () => {
+      isSubscribed = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   const isActive = (href: string) => {
-    const base = href.split('?')[0];
-    if (base === '/dashboard') return pathname === '/dashboard';
-    return pathname === base || pathname.startsWith(base + '/');
+    const [base, queryStr] = href.split('?');
+    const pathMatches = pathname === base || (base !== '/' && pathname.startsWith(base + '/'));
+    
+    if (!pathMatches) return false;
+    
+    const hrefParams = new URLSearchParams(queryStr || '');
+    const hasRecordingParam = hrefParams.get('has_recording');
+    const hasTranscriptParam = hrefParams.get('has_transcript');
+    
+    const currentHasRecording = searchParams.get('has_recording');
+    const currentHasTranscript = searchParams.get('has_transcript');
+    
+    if (hasRecordingParam) {
+      return currentHasRecording === hasRecordingParam;
+    }
+    if (hasTranscriptParam) {
+      return currentHasTranscript === hasTranscriptParam;
+    }
+    
+    return !currentHasRecording && !currentHasTranscript;
   };
 
   const handleLogout = async () => {
@@ -111,9 +152,9 @@ export function Sidebar({ user, business }: { user?: { ownerName: string; email:
               href={item.href}
               data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
               className={cn(
-                'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors',
+                'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150',
                 active
-                  ? 'bg-brand-900 text-white'
+                  ? 'bg-brand-600 text-white font-bold shadow-md shadow-brand-600/10'
                   : 'text-white/65 hover:bg-white/[0.06] hover:text-white',
               )}
             >
@@ -125,6 +166,12 @@ export function Sidebar({ user, business }: { user?: { ownerName: string; email:
       </SidebarContent>
 
       <SidebarFooter>
+        {/* Live System Signals */}
+        <div className="mb-3.5 px-2.5 py-2 rounded-lg bg-white/[0.03] border border-white/5 flex items-center justify-between text-[9px] font-mono font-bold tracking-wider uppercase text-white/40">
+          <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> {activeCount} active campaign{activeCount !== 1 ? 's' : ''}</span>
+          <span>SYSTEM ONLINE</span>
+        </div>
+
         <div className="flex items-center gap-2.5 mb-3">
           <div className="w-9 h-9 rounded-full bg-brand-600 text-white grid place-items-center font-bold text-sm">
             {(user?.ownerName || 'U').slice(0, 1).toUpperCase()}
