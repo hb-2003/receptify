@@ -56,20 +56,23 @@ def initiate_twilio_call(call_id: str) -> dict:
     # Twilio API URL
     twilio_url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json"
     
-    # Send request using httpx (standard pre-installed in venv)
+    # --- twilio calling pass ---
+    # Trigger the real HTTP call request to Twilio's infrastructure.
+    # We specify a strict 10.0-second network timeout so a hung connection
+    # doesn't block our backend thread indefinitely.
     try:
-        with httpx.Client() as client:
+        with httpx.Client(timeout=10.0) as client:
             response = client.post(twilio_url, headers=headers, data=data)
             
             if response.status_code == 201 or response.status_code == 200:
                 res_data = response.json()
                 sid = res_data.get('sid')
                 
-                # Update call status to ringing
+                # Update call status to ringing since the dial was successful
                 call.status = 'ringing'
                 call.save()
                 
-                # Create a call event for tracking
+                # Create a call event for tracking this active call
                 CallEvent.objects.create(
                     call=call,
                     event_type='initiated',
@@ -79,6 +82,7 @@ def initiate_twilio_call(call_id: str) -> dict:
                 return {'success': True, 'sid': sid}
             else:
                 err_text = response.text
+                # Log a failure event so we can audit what went wrong with the carrier
                 CallEvent.objects.create(
                     call=call,
                     event_type='failed',
