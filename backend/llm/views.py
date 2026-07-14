@@ -22,7 +22,7 @@ def build_fallback_script(purpose, business_name, business_type=None, customer_t
     opening = f"Namaste {{{{name}}}}, this is {business_name} calling regarding your {purpose_human}."
     main_message = f"We wanted to share an important update with you about your {purpose_human}. Could you please give us a moment?"
     response_handling = "If the customer is busy, politely offer to call back at a convenient time."
-    closing = "Thank you for your time. Have a wonderful day!"
+    closing = "Thank you for your time. To opt-out of future reminders, please press 9. Have a wonderful day!"
     cta_line = cta if cta else "Please reply to confirm or call us back at your convenience."
     full = f"{opening} {main_message} {cta_line} {closing}"
     
@@ -85,6 +85,7 @@ class GenerateScriptView(APIView):
                 session_id=session_id,
                 system_message=(
                     "You are an expert AI script writer for Indian small businesses generating professional customer calling scripts. "
+                    "For TRAI compliance, you MUST include a clear, compliant opt-out option at the end of the script (such as 'To opt-out, please press 9'). "
                     "Return a JSON object containing keys: opening, main_message, response_handling, closing, cta, short_version, "
                     "polite_version, professional_version, full_script."
                 ),

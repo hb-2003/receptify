@@ -96,15 +96,18 @@ export default function CustomersPage() {
   // Safe helper to parse DB custom fields JSON
   const getParsedCustomFields = (customer: Customer): Record<string, string> => {
     if (!customer.customFields) return {};
+    if (typeof customer.customFields === 'object') {
+      return customer.customFields as Record<string, string>;
+    }
     try {
-      const parsed = JSON.parse(customer.customFields);
+      const parsed = JSON.parse(customer.customFields as any);
       if (typeof parsed === 'object' && parsed !== null) {
         return parsed as Record<string, string>;
       }
     } catch (err) {
       // Fallback if it is double serialized or string
       try {
-        const doubleParsed = JSON.parse(JSON.parse(customer.customFields));
+        const doubleParsed = JSON.parse(JSON.parse(customer.customFields as any));
         if (typeof doubleParsed === 'object' && doubleParsed !== null) {
           return doubleParsed as Record<string, string>;
         }

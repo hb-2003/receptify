@@ -102,6 +102,12 @@ export function Sidebar({ user, business }: { user?: { ownerName: string; email:
 
   const isActive = (href: string) => {
     const [base, queryStr] = href.split('?');
+    
+    // Special exception to prevent /campaigns/new from activating parent /campaigns nav link
+    if (base === '/campaigns' && pathname === '/campaigns/new') {
+      return false;
+    }
+
     const pathMatches = pathname === base || (base !== '/' && pathname.startsWith(base + '/'));
     
     if (!pathMatches) return false;
