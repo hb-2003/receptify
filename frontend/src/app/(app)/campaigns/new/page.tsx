@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Wallet, Calendar, MessageSquareHeart, Bell, RefreshCw, PackageCheck,
-  ArrowLeft, ArrowRight, Sparkles, ShieldCheck, CheckCircle2, Users, Megaphone, FileText, Mic, Play, Loader2, Plus, AlertTriangle, Save, Check
+  ArrowLeft, ArrowRight, Sparkles, ShieldCheck, CheckCircle2, Users, Megaphone, FileText, Mic, Play, Loader2, Plus, AlertTriangle, Save, Check, Trash2, Filter
 } from 'lucide-react';
 import { PURPOSE_LABEL } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -41,6 +41,36 @@ const VARIABLES = [
   { value: 'appointment_date', label: '[Appointment Date]', color: 'purple' },
 ];
 
+const FILTER_FIELDS = [
+  { value: 'city', label: 'City', type: 'text' },
+  { value: 'customer_type', label: 'Customer Type', type: 'text' },
+  { value: 'due_date', label: 'Due Date', type: 'date' },
+  { value: 'appointment_date', label: 'Appointment Date', type: 'date' },
+];
+
+const OPERATORS = [
+  { value: 'EQUALS', label: 'Is exactly' },
+  { value: 'NOT_EQUALS', label: 'Is not' },
+  { value: 'CONTAINS', label: 'Contains' },
+  { value: 'GREATER_THAN', label: 'Greater than (>)' },
+  { value: 'LESS_THAN', label: 'Less than (<)' },
+  { value: 'IS_NULL', label: 'Is empty' },
+  { value: 'IS_NOT_NULL', label: 'Is not empty' },
+];
+
+interface FilterRule {
+  id: string;
+  field_name: string;
+  operator: string;
+  value: any;
+}
+
+interface FilterGroup {
+  id: string;
+  logic_operator: 'AND' | 'OR';
+  rules: FilterRule[];
+}
+
 export default function NewCampaignPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -54,11 +84,29 @@ export default function NewCampaignPage() {
   const [isSendingTestCall, setIsSendingTestCall] = useState(false);
   const [isPlayingActualVoiceSample, setIsPlayingActualVoiceSample] = useState(false);
 
-  // Core data payload
+  // Audience Mode Selection: 'rules' or 'static'
+  const [audienceMode, setAudienceMode] = useState<'rules' | 'static'>('rules');
+  
+  // Rule-Builder Group State
+  const [filterGroups, setFilterGroups] = useState<FilterGroup[]>([
+    {
+      id: 'group-1',
+      logic_operator: 'AND',
+      rules: [
+        { id: 'rule-1', field_name: 'city', operator: 'EQUALS', value: '' }
+      ]
+    }
+  ]);
+  
+  // Live audience count metrics preview state
+  const [previewCount, setPreviewCount] = useState(0);
+  const [previewCustomers, setPreviewCustomers] = useState<any[]>([]);
+  const [isFetchingPreview, setIsFetchingPreview] = useState(false);
+
+  // Core campaign payload
   const [data, setData] = useState({
     name: '',
     purpose: '',
-    branch: '', // New field for Product/Branch
     customerIds: [] as string[],
     scriptText: '',
     language: 'en' as 'en', // Strictly locked to English
@@ -84,11 +132,62 @@ export default function NewCampaignPage() {
   
   const [showSampleData, setShowSampleData] = useState(false);
   const scriptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetch('/api/customers').then((r) => r.json()).then((d) => setCustomers(d.customers || []));
     fetch('/api/auth/me').then((r) => r.json()).then((d) => setBusiness(d.business));
   }, []);
+
+  // Fetch dynamic preview metrics when filter groups are updated
+  useEffect(() => {
+    if (audienceMode === 'rules' && step === 2) {
+      triggerPreviewFetch();
+    }
+  }, [filterGroups, audienceMode, step]);
+
+  // Clean up any ongoing browser speech synthesis when changing steps or unmounting
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [step]);
+
+  const triggerPreviewFetch = async () => {
+    // Cancel any ongoing previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setIsFetchingPreview(true);
+
+    try {
+      const res = await fetch('/api/customers/audiences/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filterGroups }),
+        signal: controller.signal
+      });
+      const d = await res.json();
+      setPreviewCount(d.count || 0);
+      setPreviewCustomers(d.customers || []);
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error("Preview fetch failed", err);
+        setPreviewCount(0);
+        setPreviewCustomers([]);
+      }
+    } finally {
+      // Only finalize loading state if this is the current active request
+      if (abortControllerRef.current === controller) {
+        setIsFetchingPreview(false);
+      }
+    }
+  };
 
   const next = () => setStep((s) => Math.min(8, s + 1));
   const back = () => setStep((s) => Math.max(1, s - 1));
@@ -106,7 +205,18 @@ export default function NewCampaignPage() {
 
   const canNext = () => {
     if (step === 1) return !!data.purpose && !!data.name;
-    if (step === 2) return data.customerIds.length > 0;
+    if (step === 2) {
+      if (audienceMode === 'static') return data.customerIds.length > 0;
+      
+      // Filter Rules must match at least 1 customer and all rules must have a valid non-empty value (except for null check operators)
+      const allRulesValid = filterGroups.every((group) => 
+        group.rules.every((rule) => {
+          if (rule.operator === 'IS_NULL' || rule.operator === 'IS_NOT_NULL') return true;
+          return rule.value !== undefined && rule.value !== null && String(rule.value).trim() !== '';
+        })
+      );
+      return previewCount > 0 && allRulesValid;
+    }
     if (step === 3) return data.scriptText.trim().length > 10;
     if (step === 5) {
       // Compliance check is now a hard gate blocking next progress
@@ -156,17 +266,13 @@ export default function NewCampaignPage() {
           objection_handling: data.objection_handling,
           cta: data.cta,
           include_opt_out: true, // Default to true for TRAI compliance
-          dynamic_variables: ['[Customer Name]', '[Amount Due]', '[Due Date]', '[Appointment Date]']
         }),
       });
       const d = await res.json();
-      if (!res.ok) {
-        throw new Error(d.error || 'Failed to generate script');
-      }
       setData((prev) => ({ ...prev, scriptText: d.fullScript || d.full_script || `Hello [Customer Name], this is ${business?.name || 'our team'} calling regarding your appointment. Press 9 to opt-out.` }));
       toast.success('AI script generated successfully');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to generate script');
+    } catch {
+      toast.error('Failed to generate script');
     } finally {
       setIsGenerating(false);
     }
@@ -206,38 +312,206 @@ export default function NewCampaignPage() {
   };
 
   const playVoiceActualScript = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      toast.error("Text-to-speech is not supported on this browser.");
+      return;
+    }
+
+    if (!data.scriptText) {
+      toast.error("Please write or generate a script first.");
+      return;
+    }
+
+    // Cancel any ongoing speech and resume to unstick Chrome's synthesis engine
+    window.speechSynthesis.cancel();
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+
     setIsPlayingActualVoiceSample(true);
-    // Simulate playing actual script synthesized
     toast.info("Synthesizing actual voice script sample...");
-    setTimeout(() => {
+
+    // Clean script text of template brackets so the voice synthesizer sounds natural
+    const cleanText = data.scriptText
+      .replace(/\{\{fullName\}\}/gi, "Priya Patel")
+      .replace(/\{\{name\}\}/gi, "Rahul")
+      .replace(/\{\{dueDate\}\}/gi, "the fourteenth of October")
+      .replace(/\{\{due_date\}\}/gi, "the fourteenth of October")
+      .replace(/\{\{appointmentDate\}\}/gi, "tomorrow at 4 PM")
+      .replace(/\{\{appointment_date\}\}/gi, "tomorrow at 4 PM")
+      .replace(/\{\{customerType\}\}/gi, "Patient")
+      .replace(/\{\{customer_type\}\}/gi, "Patient")
+      .replace(/\{\{city\}\}/gi, "Mumbai")
+      .replace(/\{\{[^}]+\}\}/g, "customer");
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+
+    // Determine language and locale
+    const lang = data.language || 'en';
+    let langLocale = 'en-IN';
+    if (lang === 'hi') langLocale = 'hi-IN';
+    else if (lang === 'gu') langLocale = 'gu-IN';
+
+    utterance.lang = langLocale;
+
+    // Retrieve available system voices
+    const voices = window.speechSynthesis.getVoices();
+    const isMale = data.voiceType ? data.voiceType.includes('male') : false;
+
+    // Search for a matching Indian accent or regional voice
+    const matchingVoice = voices.find(v => {
+      const nameLower = v.name.toLowerCase();
+      const matchesLocale = v.lang.replace('_', '-').toLowerCase() === langLocale.toLowerCase();
+      if (!matchesLocale) return false;
+
+      if (isMale) {
+        return nameLower.includes('male') || nameLower.includes('ravi') || nameLower.includes('david') || nameLower.includes('google hindi') || nameLower.includes('aman') || nameLower.includes('rishi');
+      } else {
+        return nameLower.includes('female') || nameLower.includes('heera') || nameLower.includes('zira') || nameLower.includes('google translation') || nameLower.includes('swara') || nameLower.includes('tara') || nameLower.includes('lekha');
+      }
+    }) || voices.find(v => v.lang.toLowerCase().startsWith(lang.toLowerCase()));
+
+    if (matchingVoice) {
+      utterance.voice = matchingVoice;
+    }
+
+    // Configure voice style rate and pitch
+    if (data.voiceType && data.voiceType.includes('friendly')) {
+      utterance.rate = 1.0;
+      utterance.pitch = 1.15; // Slightly higher pitch for friendly tone
+    } else {
+      utterance.rate = 0.92; // Slightly measured pace for professional tone
+      utterance.pitch = 1.0;
+    }
+
+    utterance.onend = () => {
       setIsPlayingActualVoiceSample(false);
       toast.success("Voice sample playback finished successfully!");
-    }, 4000);
+      // Clear global reference
+      delete (window as any)._currentUtterance;
+    };
+
+    utterance.onerror = (err) => {
+      if (err.error !== 'interrupted') {
+        console.error("SpeechSynthesis error:", err);
+        setIsPlayingActualVoiceSample(false);
+        toast.error("Voice synthesis playback failed.");
+        // Clear global reference
+        delete (window as any)._currentUtterance;
+      }
+    };
+
+    // Store a global reference to prevent garbage collection in Chrome/Safari!
+    (window as any)._currentUtterance = utterance;
+
+    window.speechSynthesis.speak(utterance);
   };
 
   const submit = async (statusOverride = 'scheduled') => {
     setIsSubmitting(true);
     try {
+      const payload: any = {
+        ...data,
+        complianceConfirmed: data.isComplianceConfirmed,
+        status: 'draft',
+      };
+      
+      delete payload.isComplianceConfirmed;
+      
+      // If in Rules Mode, pass the filter groups instead of raw customer IDs
+      if (audienceMode === 'rules') {
+        payload.filterGroups = filterGroups;
+        payload.customerIds = []; // Empty out individual list
+      }
+
       const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          status: statusOverride, // Can be draft or scheduled
-        }),
+        body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        toast.success(statusOverride === 'draft' ? 'Campaign saved as Draft' : 'Campaign launched successfully!');
-        router.push('/campaigns');
-      } else {
+      
+      if (!res.ok) {
         const err = await res.json();
         toast.error(err.error || 'Failed to submit campaign');
+        return;
       }
+
+      const createdCampaignResponse = await res.json();
+      const campaignId = createdCampaignResponse.campaign.id;
+
+      if (statusOverride !== 'draft') {
+        const launchRes = await fetch(`/api/campaigns/${campaignId}/launch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!launchRes.ok) {
+          const launchErr = await launchRes.json();
+          toast.error(launchErr.error || 'Failed to launch campaign after creation.');
+          return;
+        }
+        
+        toast.success('Campaign launched successfully!');
+      } else {
+        toast.success('Campaign saved as Draft');
+      }
+      
+      router.push('/campaigns');
     } catch {
       toast.error('Network error submitting campaign');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Rule builder modification helpers
+  const addFilterGroup = () => {
+    const id = `group-${Date.now()}`;
+    setFilterGroups([...filterGroups, { id, logic_operator: 'AND', rules: [{ id: `rule-${Date.now()}`, field_name: 'city', operator: 'EQUALS', value: '' }] }]);
+  };
+
+  const removeFilterGroup = (groupId: string) => {
+    setFilterGroups(filterGroups.filter((g) => g.id !== groupId));
+  };
+
+  const addRuleToGroup = (groupId: string) => {
+    setFilterGroups(filterGroups.map((g) => {
+      if (g.id === groupId) {
+        return {
+          ...g,
+          rules: [...g.rules, { id: `rule-${Date.now()}`, field_name: 'city', operator: 'EQUALS', value: '' }]
+        };
+      }
+      return g;
+    }));
+  };
+
+  const removeRuleFromGroup = (groupId: string, ruleId: string) => {
+    setFilterGroups(filterGroups.map((g) => {
+      if (g.id === groupId) {
+        return {
+          ...g,
+          rules: g.rules.filter((r) => r.id !== ruleId)
+        };
+      }
+      return g;
+    }).filter((g) => g.rules.length > 0)); // Delete group completely if it contains 0 rules
+  };
+
+  const updateRuleValue = (groupId: string, ruleId: string, updates: Partial<FilterRule>) => {
+    setFilterGroups(filterGroups.map((g) => {
+      if (g.id === groupId) {
+        return {
+          ...g,
+          rules: g.rules.map((r) => r.id === ruleId ? { ...r, ...updates } : r)
+        };
+      }
+      return g;
+    }));
+  };
+
+  const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
+    setFilterGroups(filterGroups.map((g) => g.id === groupId ? { ...g, logic_operator: operator } : g));
   };
 
   // Safe preview highlights builder
@@ -308,16 +582,10 @@ export default function NewCampaignPage() {
         {step === 1 && (
           <div className="glass p-6 lg:p-8 space-y-5 bg-white border border-[#E7E4DC] rounded-3xl" data-testid="step-basics">
             <h2 className="text-xl font-bold text-brand-navy">Campaign basics</h2>
-            <p className="text-sm text-slate-500 mt-1">Configure your campaign name, purpose, and targeted business branch.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-              <div>
-                <label className="label-base">Campaign Name</label>
-                <input className="input-field" placeholder="e.g. Appointment Reminder - July Week 2" value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} />
-              </div>
-              <div>
-                <label className="label-base">Product / Branch Store</label>
-                <input className="input-field" placeholder="e.g. Main Clinic, Andheri Branch" value={data.branch} onChange={(e) => setData({ ...data, branch: e.target.value })} />
-              </div>
+            <p className="text-sm text-slate-500 mt-1">Configure your campaign name and purpose.</p>
+            <div className="mt-6">
+              <label className="label-base">Campaign Name</label>
+              <input className="input-field" placeholder="e.g. Appointment Reminder - July Week 2" value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} />
             </div>
 
             <div className="mt-6">
@@ -350,60 +618,247 @@ export default function NewCampaignPage() {
           </div>
         )}
 
-        {/* STEP 2: Audience Selection */}
+        {/* STEP 2: Audience Selection (UPGRADED RULE BUILDER FLOW) */}
         {step === 2 && (
-          <div className="glass p-6 lg:p-8 space-y-5 bg-white border border-[#E7E4DC] rounded-3xl" data-testid="step-audience">
-            <div className="flex items-center justify-between">
+          <div className="glass p-6 lg:p-8 space-y-6 bg-white border border-[#E7E4DC] rounded-3xl" data-testid="step-audience">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-xl font-bold text-brand-navy">Choose Campaign Audience</h2>
-                <p className="text-sm text-slate-500 mt-1">Select which customer records to contact during this campaign run.</p>
+                <p className="text-sm text-slate-500 mt-1">Configure CRM target criteria or select contacts manually as fallback.</p>
               </div>
-              <div className="bg-[#EFF6FF] border border-[#2F5CFF]/20 px-4 py-2.5 rounded-xl font-mono text-xs font-bold text-[#2F5CFF] shadow-sm">
-                Target List Count: {data.customerIds.length} Customers
+              
+              {/* Audience Mode Switch */}
+              <div className="inline-flex p-1 bg-slate-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setAudienceMode('rules')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                    audienceMode === 'rules' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  )}
+                >
+                  <Filter className="w-3.5 h-3.5 inline mr-1" /> Dynamic Rules
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAudienceMode('static')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                    audienceMode === 'static' ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  )}
+                >
+                  <Users className="w-3.5 h-3.5 inline mr-1" /> Static List
+                </button>
               </div>
             </div>
 
-            <div className="mt-6 border border-slate-200 rounded-2xl overflow-hidden max-h-[320px] overflow-y-auto">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                    <th className="p-3 w-10">Select</th>
-                    <th className="p-3">Customer Name</th>
-                    <th className="p-3">Phone</th>
-                    <th className="p-3">Email</th>
-                    <th className="p-3">City</th>
-                    <th className="p-3">Type</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {customers.map((c) => {
-                    const isChecked = data.customerIds.includes(c.id);
-                    return (
-                      <tr key={c.id} className="hover:bg-slate-50/50">
-                        <td className="p-3">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 text-[#2F5CFF] rounded cursor-pointer"
-                            checked={isChecked}
-                            onChange={() => {
-                              const newList = isChecked
-                                ? data.customerIds.filter((id) => id !== c.id)
-                                : [...data.customerIds, c.id];
-                              setData({ ...data, customerIds: newList });
-                            }}
-                          />
-                        </td>
-                        <td className="p-3 font-bold text-slate-800">{c.fullName}</td>
-                        <td className="p-3 font-mono text-slate-500">{c.phone}</td>
-                        <td className="p-3 text-slate-500">{c.email || '—'}</td>
-                        <td className="p-3 text-slate-500">{c.city || '—'}</td>
-                        <td className="p-3 text-slate-500 uppercase font-bold text-[10px] tracking-wider">{c.customerType || 'Customer'}</td>
+            {audienceMode === 'rules' ? (
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+                {/* Rule Builder Panel */}
+                <div className="lg:col-span-3 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500">Segmentation Rules</h3>
+                    <button
+                      type="button"
+                      onClick={addFilterGroup}
+                      className="text-[11px] font-bold text-[#2F5CFF] hover:underline cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add OR Group
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {filterGroups.map((g, gIdx) => (
+                      <div key={g.id} className="p-5 bg-slate-50 border border-slate-200/80 rounded-2xl relative space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Match group conditions:</span>
+                            <select
+                              value={g.logic_operator}
+                              onChange={(e) => updateGroupOperator(g.id, e.target.value as any)}
+                              className="px-2 py-1 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 rounded cursor-pointer"
+                            >
+                              <option value="AND">AND (All match)</option>
+                              <option value="OR">OR (Any match)</option>
+                            </select>
+                          </div>
+                          
+                          {filterGroups.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeFilterGroup(g.id)}
+                              className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Rules Rows list inside Group */}
+                        <div className="space-y-2.5">
+                          {g.rules.map((r, rIdx) => (
+                            <div key={r.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                              {/* Field */}
+                              <div className="sm:col-span-4">
+                                <select
+                                  value={r.field_name}
+                                  onChange={(e) => updateRuleValue(g.id, r.id, { field_name: e.target.value })}
+                                  className="input-field py-2 text-xs font-bold text-slate-700 cursor-pointer"
+                                >
+                                  <option value="city">City</option>
+                                  <option value="customer_type">Customer Type</option>
+                                  <option value="due_date">Due Date</option>
+                                  <option value="appointment_date">Appointment Date</option>
+                                  <option value="custom_fields.lead_score">Custom Field: Lead Score</option>
+                                </select>
+                              </div>
+
+                              {/* Operator */}
+                              <div className="sm:col-span-4">
+                                <select
+                                  value={r.operator}
+                                  onChange={(e) => updateRuleValue(g.id, r.id, { operator: e.target.value })}
+                                  className="input-field py-2 text-xs font-semibold text-slate-600 cursor-pointer"
+                                >
+                                  {OPERATORS.map((o) => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* Value Input (Not rendered if operator is null-check) */}
+                              <div className="sm:col-span-3">
+                                {r.operator !== 'IS_NULL' && r.operator !== 'IS_NOT_NULL' ? (
+                                  <input
+                                    type={r.field_name.includes('date') ? 'date' : 'text'}
+                                    className="input-field py-2 text-xs"
+                                    placeholder="Enter value"
+                                    value={r.value}
+                                    onChange={(e) => updateRuleValue(g.id, r.id, { value: e.target.value })}
+                                  />
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 block px-2.5 font-bold uppercase tracking-wider">Null Checker</span>
+                                )}
+                              </div>
+
+                              {/* Delete Rule */}
+                              <div className="sm:col-span-1 text-center">
+                                {g.rules.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeRuleFromGroup(g.id, r.id)}
+                                    className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                                  >
+                                    ✖
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => addRuleToGroup(g.id)}
+                          className="text-[10px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer inline-flex items-center gap-1 pt-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Condition row
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Target Audience Count Preview Card */}
+                <div className="lg:col-span-2 h-full flex flex-col justify-between">
+                  <div className="glass p-5 rounded-2xl border border-slate-200 space-y-4">
+                    <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Live Preview Counter</span>
+                    
+                    <div className="text-center p-6 bg-slate-50 border border-slate-150 rounded-2xl">
+                      {isFetchingPreview ? (
+                        <div className="flex flex-col items-center justify-center space-y-2 py-4">
+                          <Loader2 className="w-6 h-6 text-[#2F5CFF] animate-spin" />
+                          <span className="text-xs text-slate-400 font-bold">Scanning audience lists...</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="text-4xl font-extrabold text-[#2F5CFF] tracking-tight">{previewCount}</div>
+                          <div className="text-xs font-bold text-slate-700">Target Contacts Matched</div>
+                          <p className="text-[10px] text-slate-400 italic leading-relaxed pt-1.5">Matching patients are evaluated at runtime dynamically when the campaign runs</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Previews records table */}
+                    {!isFetchingPreview && previewCustomers.length > 0 && (
+                      <div className="space-y-2">
+                        <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 px-1">Audience Samples</span>
+                        <div className="divide-y divide-slate-100 max-h-[160px] overflow-y-auto pr-1">
+                          {previewCustomers.map((c, idx) => (
+                            <div key={idx} className="py-2 flex justify-between gap-3 text-xs">
+                              <span className="font-bold text-slate-800">{c.fullName}</span>
+                              <span className="text-slate-400 font-mono">{c.city || 'No City'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // STATIC MANUAL TABLE SELECTION
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-400 leading-normal">Checking boxes triggers a manual static mapping inside the CampaignCustomer DB records.</p>
+                  <div className="bg-[#EFF6FF] border border-[#2F5CFF]/20 px-3.5 py-2 rounded-xl font-mono text-xs font-bold text-[#2F5CFF]">
+                    Selected Checklist: {data.customerIds.length} Customers
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-[320px] overflow-y-auto mt-4">
+                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                        <th className="p-3 w-10">Select</th>
+                        <th className="p-3">Customer Name</th>
+                        <th className="p-3">Phone</th>
+                        <th className="p-3">Email</th>
+                        <th className="p-3">City</th>
+                        <th className="p-3">Type</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {customers.map((c) => {
+                        const isChecked = data.customerIds.includes(c.id);
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50/50">
+                            <td className="p-3">
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 text-[#2F5CFF] rounded cursor-pointer"
+                                checked={isChecked}
+                                onChange={() => {
+                                  const newList = isChecked
+                                    ? data.customerIds.filter((id) => id !== c.id)
+                                    : [...data.customerIds, c.id];
+                                  setData({ ...data, customerIds: newList });
+                                }}
+                              />
+                            </td>
+                            <td className="p-3 font-bold text-slate-800">{c.fullName}</td>
+                            <td className="p-3 font-mono text-slate-500">{c.phone}</td>
+                            <td className="p-3 text-slate-500">{c.email || '—'}</td>
+                            <td className="p-3 text-slate-500">{c.city || '—'}</td>
+                            <td className="p-3 text-slate-500 uppercase font-bold text-[10px] tracking-wider">{c.customerType || 'Customer'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -484,7 +939,7 @@ export default function NewCampaignPage() {
                     {showSampleData ? "✓ Sample Data Active" : "Mock Sample Data"}
                   </button>
                 </div>
-                <div className="p-5 bg-white border border-slate-150 shadow-inner rounded-xl min-h-[140px] text-xs sm:text-sm leading-relaxed text-slate-600">
+                <div className="p-4 bg-white border border-[#E7E4DC] rounded-xl shadow-inner min-h-[120px] text-xs sm:text-sm leading-relaxed text-slate-600">
                   {renderPreview(data.scriptText)}
                 </div>
               </div>
@@ -495,43 +950,46 @@ export default function NewCampaignPage() {
         {/* STEP 4: Voice Select */}
         {step === 4 && (
           <div className="glass p-6 lg:p-8 space-y-5 bg-white border border-[#E7E4DC] rounded-3xl" data-testid="step-voice">
-            <h2 className="text-xl font-bold text-brand-navy">Voice preference</h2>
-            <p className="text-sm text-slate-500 mt-1">Choose how your company voice assistant should sound. You can listen to the actual script synthesized below.</p>
+            <h2 className="text-xl font-bold text-brand-navy">Voice Select</h2>
+            <p className="text-sm text-slate-500">Configure your speaker avatar accent preferences below.</p>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
               {[
-                { v: 'female_professional', label: 'Female · Professional' },
-                { v: 'female_friendly', label: 'Female · Friendly' },
-                { v: 'male_professional', label: 'Male · Professional' },
-                { v: 'male_friendly', label: 'Male · Friendly' },
-              ].map((o) => {
-                const isSelected = data.voiceType === o.v;
+                { id: 'female_professional', label: 'Female · Professional (Alice)', desc: 'Clear, corporate, and precise articulation' },
+                { id: 'female_friendly', label: 'Female · Friendly', desc: 'Warm, highly engaging regional tone' },
+                { id: 'male_professional', label: 'Male · Professional', desc: 'Authoritative, calm, and formal speech' },
+                { id: 'male_friendly', label: 'Male · Friendly', desc: 'Conversational, energetic, and helpful accent' }
+              ].map((v) => {
+                const active = data.voiceType === v.id;
                 return (
                   <button
-                    key={o.v}
-                    onClick={() => setData({ ...data, voiceType: o.v })}
+                    key={v.id}
+                    onClick={() => setData({ ...data, voiceType: v.id })}
                     className={cn(
-                      "p-4 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer",
-                      isSelected ? "bg-[#EFF6FF] border-[#2F5CFF] ring-2 ring-[#2F5CFF]/15" : "bg-white border-[#E7E4DC] hover:bg-slate-50"
+                      "p-5 border rounded-2xl text-left transition-all duration-200 cursor-pointer flex flex-col justify-between h-28",
+                      active ? "bg-[#EFF6FF] border-[#2F5CFF]" : "bg-white border-slate-200 hover:bg-slate-50"
                     )}
                   >
-                    <span className="text-xs sm:text-sm font-bold text-brand-navy">{o.label}</span>
-                    {isSelected && <Check className="w-4 h-4 text-[#2F5CFF]" />}
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-bold text-sm text-slate-800">{v.label}</span>
+                      {active && <span className="w-5 h-5 rounded-full bg-[#2F5CFF] text-white flex items-center justify-center text-[10px]">✓</span>}
+                    </div>
+                    <span className="text-[11px] text-slate-400 block mt-1.5 leading-relaxed">{v.desc}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Play Actual Script TTS sample button */}
-            <div className="mt-6 p-5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 flex-wrap">
+            {/* Synthesis audio wave visualizer sample */}
+            <div className="mt-6 p-5 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-4 flex-wrap">
               <div>
                 <span className="text-xs font-bold text-slate-800 block">Hear actual synthesized script voice</span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">Loads and synthesizes your actual typed script on demand</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">Reads your typed script using your selected accent profile</span>
               </div>
               <button
                 onClick={playVoiceActualScript}
                 disabled={isPlayingActualVoiceSample || !data.scriptText}
-                className="btn-primary py-2.5 text-xs font-mono font-bold flex gap-1.5 h-11 px-4 cursor-pointer disabled:opacity-50"
+                className="btn-primary py-2.5 h-11 px-4 text-xs font-mono font-bold flex gap-1.5 items-center cursor-pointer disabled:opacity-50"
               >
                 {isPlayingActualVoiceSample ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Synthesizing...</>
@@ -565,7 +1023,7 @@ export default function NewCampaignPage() {
                   <div>
                     <div className="text-sm font-bold">Script Auto-Scan: NON-COMPLIANT ❌</div>
                     <div className="text-xs text-rose-600 mt-1">
-                      <strong>Blocked:</strong> Your script is missing strict DND opt-out wording (must include words like <em>'opt-out'</em> or <em>'press 9'</em>, and have length &gt;= 30). You cannot proceed further.
+                      <strong>Blocked:</strong> Your script is missing strict DND opt-out wording (must include words like <em>{"'opt-out'"}</em> or <em>{"'press 9'"}</em>, and have length &gt;= 30). You cannot proceed further.
                     </div>
                   </div>
                 </div>
@@ -677,10 +1135,15 @@ export default function NewCampaignPage() {
               <div className="space-y-4">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs sm:text-sm">
                   <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="font-bold text-slate-500">Campaign Name:</span> <span className="font-bold text-slate-800">{data.name}</span></div>
-                  <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="font-bold text-slate-500">Product / Branch:</span> <span className="font-bold text-slate-800">{data.branch || '—'}</span></div>
                   <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="font-bold text-slate-500">Purpose:</span> <span className="font-bold text-slate-800 uppercase text-xs tracking-wider">{data.purpose.replace('_', ' ')}</span></div>
-                  <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="font-bold text-slate-500">Audience List Count:</span> <span className="font-bold text-[#2F5CFF]">{data.customerIds.length} Customers</span></div>
+                  <div className="flex justify-between border-b border-slate-200/60 pb-2">
+                    <span className="font-bold text-slate-500">Audience:</span> 
+                    <span className="font-bold text-[#2F5CFF]">
+                      {audienceMode === 'rules' ? `Dynamic Rules (${previewCount} Matched)` : `${data.customerIds.length} Customers selected`}
+                    </span>
+                  </div>
                   <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="font-bold text-slate-500">Voice Assistant:</span> <span className="font-bold text-slate-800 capitalize">{data.voiceType.replace('_', ' ')}</span></div>
+                  <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="font-bold text-slate-500">Compliance Code:</span> <span className="font-bold text-emerald-600">COMPLIANT (TRAI Verified)</span></div>
                   <div className="flex justify-between"><span className="font-bold text-slate-500">Schedule Launch:</span> <span className="font-bold text-slate-800">{data.scheduledAt.replace('T', ' ')}</span></div>
                 </div>
 

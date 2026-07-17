@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from campaigns.models import Campaign, CampaignCustomer, Template, Script
+from campaigns.models import Campaign, CampaignCustomer, Template, Script, CampaignFilterGroup, CampaignFilterRule
 from campaigns.serializers import CampaignSerializer, TemplateSerializer
 from customers.models import Customer
 from customers.serializers import CustomerSerializer
@@ -17,7 +17,7 @@ from calls.models import Call, CallTranscript, CallRecording
 from customers.views import to_camel_case
 
 
-from receptify.models import TwilioCredentials
+from receptify.models import TwilioCredentials, Business
 
 # NOTE: The mock calling simulator thread (run_mock_campaign) and its utilities (OUTCOMES,
 # pick_outcome, mock_transcript, mock_summary) have been completely removed for KAN-17.
@@ -49,12 +49,23 @@ class CampaignListCreateView(APIView):
         retry_attempts = request.data.get('retryAttempts', 2)
         delay_between_calls = request.data.get('delayBetweenCalls', 5)
         is_compliance_confirmed = request.data.get('complianceConfirmed', False)
+        
+        # Capture optional dynamic criteria groups
+        filter_groups = request.data.get('filterGroups') or request.data.get('filter_groups', [])
 
         if not name:
             return Response({'error': 'Campaign name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             with transaction.atomic():
+                # Dynamically count target audience if criteria are provided
+                if filter_groups:
+                    from customers.views import compile_filters_to_q
+                    q_constraints = compile_filters_to_q(filter_groups, user.business_id)
+                    total_contacts = Customer.objects.filter(q_constraints).count()
+                else:
+                    total_contacts = len(customer_ids)
+
                 campaign = Campaign.objects.create(
                     business_id=user.business_id,
                     name=name,
@@ -68,17 +79,32 @@ class CampaignListCreateView(APIView):
                     retry_attempts=retry_attempts,
                     delay_between_calls=delay_between_calls,
                     is_compliance_confirmed=is_compliance_confirmed,
-                    total_contacts=len(customer_ids),
+                    total_contacts=total_contacts,
                     status='draft'
                 )
 
-                # Link associated customers
-                campaign_customer_relationships = []
-                for customer_id in customer_ids:
-                    campaign_customer_relationships.append(CampaignCustomer(campaign=campaign, customer_id=customer_id))
-                
-                if campaign_customer_relationships:
-                    CampaignCustomer.objects.bulk_create(campaign_customer_relationships)
+                if filter_groups:
+                    # Persist the dynamic filter criteria groups and rules in database
+                    for group_data in filter_groups:
+                        filter_group = CampaignFilterGroup.objects.create(
+                            campaign=campaign,
+                            logic_operator=group_data.get('logic_operator', 'AND') or group_data.get('logicOperator', 'AND')
+                        )
+                        for rule_data in group_data.get('rules', []):
+                            CampaignFilterRule.objects.create(
+                                group=filter_group,
+                                field_name=rule_data.get('field_name') or rule_data.get('fieldName'),
+                                operator=rule_data.get('operator'),
+                                value=rule_data.get('value')
+                            )
+                else:
+                    # Link associated customers (legacy static list fallback)
+                    campaign_customer_relationships = []
+                    for customer_id in customer_ids:
+                        campaign_customer_relationships.append(CampaignCustomer(campaign=campaign, customer_id=customer_id))
+                    
+                    if campaign_customer_relationships:
+                        CampaignCustomer.objects.bulk_create(campaign_customer_relationships)
 
             serializer = CampaignSerializer(campaign)
             return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_201_CREATED)
@@ -95,10 +121,22 @@ class CampaignDetailView(APIView):
         except Campaign.DoesNotExist:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Get associated customers
-        campaign_customer_relationships = CampaignCustomer.objects.filter(campaign_id=id)
-        customer_ids = [relationship.customer_id for relationship in campaign_customer_relationships]
-        customers = Customer.objects.filter(id__in=customer_ids)
+        # Identify associated target customer list (either via dynamic database filters or static mapping fallback)
+        filter_groups = campaign.filter_groups.all()
+        if filter_groups.exists():
+            from customers.views import compile_filters_to_q
+            serial_groups = []
+            for filter_group in filter_groups:
+                serial_groups.append({
+                    'logic_operator': filter_group.logic_operator,
+                    'rules': [{'field_name': rule.field_name, 'operator': rule.operator, 'value': rule.value} for rule in filter_group.rules.all()]
+                })
+            q_constraints = compile_filters_to_q(serial_groups, user.business_id)
+            customers = Customer.objects.filter(q_constraints)
+        else:
+            campaign_customer_relationships = CampaignCustomer.objects.filter(campaign_id=id)
+            customer_ids = [relationship.customer_id for relationship in campaign_customer_relationships]
+            customers = Customer.objects.filter(id__in=customer_ids)
 
         # Get call history for this campaign
         calls = Call.objects.filter(campaign_id=id).select_related('customer', 'campaign').order_by('-created_at')
@@ -149,38 +187,58 @@ class CampaignLaunchView(APIView):
                 if not TwilioCredentials.objects.filter(business_id=user.business_id).exists():
                     return Response({'error': 'No Twilio credentials configured for your business. Please set them up in settings first.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                # Fetch associated contacts to make sure the campaign is not empty
-                campaign_customers = CampaignCustomer.objects.filter(campaign_id=campaign.id)
-                if not campaign_customers.exists():
-                    return Response({'error': 'Cannot launch a campaign with no contacts. Please add customers to this campaign first.'}, status=status.HTTP_400_BAD_REQUEST)
+                # Identify target customer list (either via dynamic database filters or static mapping fallback with consent_status='granted' and business_id filter checks)
+                filter_groups = campaign.filter_groups.all()
+                if filter_groups.exists():
+                    from customers.views import compile_filters_to_q
+                    serial_groups = []
+                    for filter_group in filter_groups:
+                        serial_groups.append({
+                            'logic_operator': filter_group.logic_operator,
+                            'rules': [{'field_name': rule.field_name, 'operator': rule.operator, 'value': rule.value} for rule in filter_group.rules.all()]
+                        })
+                    q_constraints = compile_filters_to_q(serial_groups, user.business_id)
+                    customer_ids_to_dial = list(Customer.objects.filter(q_constraints, consent_status='granted').values_list('id', flat=True))
+                else:
+                    campaign_customers = CampaignCustomer.objects.filter(campaign_id=campaign.id)
+                    static_customer_ids = list(campaign_customers.values_list('customer_id', flat=True))
+                    customer_ids_to_dial = list(Customer.objects.filter(
+                        business_id=user.business_id,
+                        id__in=static_customer_ids,
+                        consent_status='granted'
+                    ).values_list('id', flat=True))
 
-                # Validate that the business has sufficient call credits
-                contacts_count = campaign_customers.count()
-                if not user.business or user.business.call_credits < contacts_count:
-                    available_credits = user.business.call_credits if user.business else 0
-                    return Response({'error': f'Insufficient call credits. You need at least {contacts_count} credits, but only have {available_credits} left.'}, status=status.HTTP_400_BAD_REQUEST)
+                contacts_count = len(customer_ids_to_dial)
+                if contacts_count == 0:
+                    return Response({'error': 'Cannot launch a campaign with no contacts. Please add customers or configure matching criteria first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Lock and retrieve user's Business balance securely to prevent concurrent overdraws
+                business = Business.objects.select_for_update().get(id=user.business_id)
+
+                # Validate that the business has sufficient call credits using locked instance
+                if business.call_credits < contacts_count:
+                    return Response({'error': f'Insufficient call credits. You need at least {contacts_count} credits, but only have {business.call_credits} left.'}, status=status.HTTP_400_BAD_REQUEST)
 
                 # Set campaign status to scheduled and use Live Twilio channel type
                 campaign.status = 'scheduled'
                 campaign.channel_type = 1
-                campaign.total_contacts = campaign_customers.count()
+                campaign.total_contacts = contacts_count
                 campaign.calls_completed = 0
                 campaign.calls_answered = 0
                 campaign.calls_failed = 0
                 campaign.save()
 
                 # Deduct calling credits atomically from the business balance
-                business = user.business
                 business.call_credits = F('call_credits') - contacts_count
                 business.save()
 
                 # Generate initial queued calls for poller processing
                 queued_calls = []
-                for campaign_customer in campaign_customers:
+                for customer_id in customer_ids_to_dial:
                     queued_calls.append(
                         Call(
                             campaign_id=campaign.id,
-                            customer_id=campaign_customer.customer_id,
+                            customer_id=customer_id,
                             status='queued',
                             outcome='pending',
                             attempt_number=1,
