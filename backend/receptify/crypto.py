@@ -1,4 +1,5 @@
 import binascii
+import hashlib
 from Cryptodome.Cipher import AES
 from decouple import config
 
@@ -6,7 +7,6 @@ def get_encryption_key() -> bytes:
     secret = config('ENCRYPTION_KEY', default='')
     if not secret:
         # Fallback key matching TypeScript: crypto.scryptSync('development_fallback_key_receptify', 'salt', 32)
-        import hashlib
         try:
             return hashlib.scrypt(
                 password=b"development_fallback_key_receptify",

@@ -287,15 +287,8 @@ class CustomerUploadView(APIView):
             due_date = row.get('dueDate')
             appointment_date = row.get('appointmentDate')
 
-            # Parse language cleanly (e.g. "English" or "Hindi" or "Gujarati" -> en, hi, gu)
+            # Force system-wide English-only default for patient records
             lang_clean = 'en'
-            lang_raw = language.lower()
-            if lang_raw.startswith('en'):
-                lang_clean = 'en'
-            elif lang_raw.startswith('hi') or lang_raw.startswith('hin'):
-                lang_clean = 'hi'
-            elif lang_raw.startswith('gu'):
-                lang_clean = 'gu'
 
             # Gather extra keys into custom fields
             extra_fields = {}

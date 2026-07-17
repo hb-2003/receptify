@@ -3,7 +3,7 @@ import time
 import httpx
 import base64
 from decouple import config
-from django.db import transaction
+from django.db import transaction, DatabaseError
 from receptify.models import TwilioCredentials
 from receptify.crypto import decrypt
 from campaigns.models import Campaign
@@ -122,7 +122,10 @@ async def run_live_campaign_dialer_async(campaign_id: str):
             with transaction.atomic():
                 try:
                     c = Campaign.objects.select_for_update(nowait=True).get(id=campaign_id)
-                except Exception:
+                except Campaign.DoesNotExist:
+                    print(f"[Dialer] Campaign {campaign_id} does not exist.")
+                    return None
+                except DatabaseError:
                     # Lock is already held by another parallel worker
                     return None
                 

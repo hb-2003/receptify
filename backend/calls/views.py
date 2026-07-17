@@ -1,13 +1,18 @@
+import logging
+from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from calls.models import Call, CallTranscript, CallRecording
 from calls.serializers import CallSerializer, CallTranscriptSerializer, CallRecordingSerializer
+from calls.utils_twilio import initiate_twilio_call
 from customers.models import Customer
 from customers.serializers import CustomerSerializer
 from campaigns.models import Campaign
 from campaigns.serializers import CampaignSerializer
 from customers.views import to_camel_case
+
+logger = logging.getLogger("receptify.calls")
 
 class CallListView(APIView):
     def get(self, request):
@@ -80,3 +85,61 @@ class CallDetailView(APIView):
             'transcript': to_camel_case(transcript_serializer.data) if transcript_serializer else None,
             'recording': to_camel_case(recording_serializer.data) if recording_serializer else None
         }, status=status.HTTP_200_OK)
+
+
+class TestCallView(APIView):
+    """
+    Endpoint supporting live pre-launch test calling for business owners to verify AI voice setups.
+    Defensively spawns atomic transient records and dispatches the call immediately via Twilio.
+    """
+    def post(self, request):
+        user = request.user
+        business_id = user.business_id
+        if not business_id:
+            return Response({'error': 'No business profile found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        to_phone = request.data.get('phoneNumber', '').strip() or request.data.get('phone_number', '').strip()
+        script_text = request.data.get('scriptText', '').strip() or request.data.get('script_text', '').strip()
+
+        if not to_phone or not script_text:
+            return Response({'error': 'Missing phone number or script text'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                # Spin up transient test-call records
+                campaign = Campaign.objects.create(
+                    business_id=business_id,
+                    name="Pre-launch Test Call",
+                    purpose="test_call",
+                    script_text=script_text,
+                    status="completed"
+                )
+                customer = Customer.objects.create(
+                    business_id=business_id,
+                    full_name="Test Recipient",
+                    phone=to_phone,
+                    consent_status="granted"
+                )
+                call = Call.objects.create(
+                    campaign=campaign,
+                    customer=customer,
+                    status="queued"
+                )
+        except Exception as e:
+            logger.error(f"Failed to set up transient test records: {str(e)}", exc_info=True)
+            return Response({'error': 'Failed to set up transient test records due to a system error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Trigger outbound telephony dispatch using our core Twilio caller utility
+        res = initiate_twilio_call(str(call.id))
+        
+        if 'error' in res:
+            # Defensive Cleanup: remove transient records on dispatch failure so they don't rot the database
+            try:
+                call.delete()
+                customer.delete()
+                campaign.delete()
+            except Exception:
+                pass
+            return Response({'error': res['error']}, status=status.HTTP_400_BAD_REQUEST)
+            
+        return Response({'success': True, 'callId': str(call.id)}, status=status.HTTP_200_OK)
