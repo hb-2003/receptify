@@ -275,32 +275,20 @@ export default function SignupPage() {
               </div>
             )}
 
-            {/* Password & Language */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wide">Password</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input 
-                    required 
-                    minLength={8} 
-                    type="password" 
-                    value={form.password} 
-                    onChange={(e) => update('password', e.target.value)} 
-                    className="input-field pl-11 h-11 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10" 
-                    placeholder="Min 8 chars" 
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wide">Preferred Language</label>
-                <select 
-                  value={form.preferredLanguage} 
-                  onChange={(e) => update('preferredLanguage', e.target.value)} 
-                  className="input-field h-11 px-3.5 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10 cursor-pointer"
-                >
-                  <option value="en">English (EN)</option>
-                </select>
+            {/* Password Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#0F172A] uppercase tracking-wide">Password</label>
+              <div className="relative">
+                <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input 
+                  required 
+                  minLength={8} 
+                  type="password" 
+                  value={form.password} 
+                  onChange={(e) => update('password', e.target.value)} 
+                  className="input-field pl-11 h-11 border-[#E2E8F0] bg-white transition-all focus:border-[#2F5CFF] focus:ring-2 focus:ring-[#2F5CFF]/10" 
+                  placeholder="Min 8 chars" 
+                />
               </div>
             </div>
 

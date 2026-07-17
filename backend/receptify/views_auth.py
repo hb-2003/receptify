@@ -5,13 +5,49 @@ import uuid
 from decouple import config
 from django.db import transaction
 from django.utils import timezone
-from django.core.mail import send_mail
+import json
+import urllib.request
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from receptify.models import User, Business, VerificationToken
+
+# Helper to send emails directly via Resend's REST API
+def send_resend_email_api(to_email, subject, message):
+    # Safe fallback if API Key is missing for local sandboxed testing
+    if not settings.RESEND_API_KEY:
+        print(f"--- [MOCK EMAIL SENT] ---\nTo: {to_email}\nSubject: {subject}\nMessage: {message}\n------------------------")
+        return True
+
+    url = "https://api.resend.com/emails"
+    headers = {
+        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0"
+    }
+    payload = {
+        "from": settings.DEFAULT_FROM_EMAIL,
+        "to": [to_email],
+        "subject": subject,
+        "text": message
+    }
+    
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers=headers,
+            method='POST'
+        )
+        # Enforce a strict 5-second connection timeout to keep auth responses fast
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            return resp.status == 200 or resp.status == 201
+    except Exception as e:
+        print(f"Resend REST API dispatch failed: {str(e)}")
+        return False
+
 
 # Helper to send verification email
 def send_verification_email(user):
@@ -36,13 +72,7 @@ def send_verification_email(user):
         f"The Receptify Team"
     )
     
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        [user.email],
-        fail_silently=True
-    )
+    send_resend_email_api(user.email, subject, message)
 
 
 # Helper to send password reset email
@@ -68,13 +98,7 @@ def send_reset_email(user):
         f"The Receptify Team"
     )
     
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        [user.email],
-        fail_silently=True
-    )
+    send_resend_email_api(user.email, subject, message)
 
 
 # Helper to generate JWT Token
