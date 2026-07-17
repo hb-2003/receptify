@@ -69,3 +69,35 @@ class Template(models.Model):
 
     class Meta:
         db_table = 'templates'
+
+
+class CampaignFilterGroup(models.Model):
+    """
+    Groups a list of dynamic target criteria together under a logical operator.
+    Enables grouping rules inside AND or OR cards.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='filter_groups', db_column='campaign_id')
+    logic_operator = models.CharField(max_length=10, choices=[('AND', 'AND'), ('OR', 'OR')], default='AND', db_column='logic_operator')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'campaign_filter_groups'
+
+
+class CampaignFilterRule(models.Model):
+    """
+    Declares an individual field filter rule (e.g. City = Mumbai).
+    Natively supports both core fields and custom dynamic JSON keys.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    group = models.ForeignKey(CampaignFilterGroup, on_delete=models.CASCADE, related_name='rules', db_column='group_id')
+    field_name = models.CharField(max_length=100, db_column='field_name')  # e.g., 'city', 'due_date', or 'custom_fields.lead_score'
+    operator = models.CharField(max_length=50, db_column='operator')      # e.g., 'EQUALS', 'IN', 'GREATER_THAN', 'BETWEEN'
+    value = models.JSONField(db_column='value')                            # Stored value structures (supports arrays or primitives)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'campaign_filter_rules'

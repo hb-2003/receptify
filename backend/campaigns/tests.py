@@ -289,3 +289,78 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
         response = self.client.post(self.launch_url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Insufficient call credits", response.data['error'])
+
+    def test_campaign_create_and_launch_with_dynamic_filters(self):
+        # 1. Create Twilio credentials so launching is allowed
+        TwilioCredentials.objects.create(
+            business=self.test_business,
+            account_sid="AC_mock_twilio_account_sid_99999",
+            auth_token="encryptedtokensecret",
+            phone_number="+1234567890"
+        )
+
+        # Clear existing customers and create specific ones for filters
+        Customer.objects.all().delete()
+        delhi_customer = Customer.objects.create(
+            business=self.test_business,
+            full_name="Aman Gupta",
+            phone="+919812345011",
+            city="Delhi",
+            consent_status="granted"
+        )
+        mumbai_customer = Customer.objects.create(
+            business=self.test_business,
+            full_name="Bhavesh Patel",
+            phone="+919812345012",
+            city="Mumbai",
+            consent_status="granted"
+        )
+
+        # 2. Call campaign creation endpoint with dynamic filter groups matching city = "Delhi"
+        payload = {
+            "name": "Dynamic Festival Offer",
+            "purpose": "promotional",
+            "language": "en",
+            "voiceType": "female_friendly",
+            "scriptText": "Hi [Customer Name], happy Diwali! Press 9 to opt-out.",
+            "complianceConfirmed": True,
+            "filterGroups": [
+                {
+                    "logic_operator": "AND",
+                    "rules": [
+                        {"field_name": "city", "operator": "EQUALS", "value": "Delhi"}
+                    ]
+                }
+            ]
+        }
+
+        response = self.client.post('/api/campaigns', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        campaign_id = response.data['campaign']['id']
+        campaign = Campaign.objects.get(id=campaign_id)
+        self.assertEqual(campaign.name, "Dynamic Festival Offer")
+        self.assertEqual(campaign.total_contacts, 1) # only Aman Gupta matches Delhi
+        self.assertTrue(campaign.filter_groups.exists())
+        self.assertEqual(campaign.filter_groups.first().rules.first().field_name, "city")
+
+        # 3. Launch the campaign
+        launch_url = reverse('campaign_launch', kwargs={'id': campaign.id})
+        with patch('campaigns.dialer.is_trai_compliant_time', return_value=True):
+            launch_response = self.client.post(launch_url)
+            self.assertEqual(launch_response.status_code, status.HTTP_200_OK)
+
+            # Re-fetch campaign
+            campaign.refresh_from_db()
+            self.assertEqual(campaign.status, "scheduled")
+            self.assertEqual(campaign.channel_type, 1)
+
+            # Check that only Aman Gupta got a queued call
+            queued_calls = Call.objects.filter(campaign_id=campaign.id)
+            self.assertEqual(queued_calls.count(), 1)
+            self.assertEqual(queued_calls.first().customer_id, delhi_customer.id)
+            self.assertEqual(queued_calls.first().status, "queued")
+
+            # Check that 1 credit was deducted from the business (500 -> 499)
+            self.test_business.refresh_from_db()
+            self.assertEqual(self.test_business.call_credits, 499)

@@ -90,16 +90,16 @@ class GenerateScriptView(APIView):
                 }
                 
                 with httpx.Client() as client:
-                    resp = client.post(gemini_url, json=payload, timeout=15.0)
-                    if resp.status_code == 200:
-                        resp_data = resp.json()
-                        text_response = resp_data['candidates'][0]['content']['parts'][0]['text']
+                    response = client.post(gemini_url, json=payload, timeout=15.0)
+                    if response.status_code == 200:
+                        response_data = response.json()
+                        text_response = response_data['candidates'][0]['content']['parts'][0]['text']
                         parsed_json = json.loads(text_response.strip())
                         return Response(parsed_json, status=status.HTTP_200_OK)
                     else:
-                        log.error(f"Gemini API returned status {resp.status_code}: {resp.text}")
-            except Exception as ex:
-                log.error(f"Gemini API generation failed: {str(ex)}")
+                        log.error(f"Gemini API returned status {response.status_code}: {response.text}")
+            except Exception as exception:
+                log.error(f"Gemini API generation failed: {str(exception)}")
 
         # 2. Retrieve Emergent LLM Key if available (Claude fallback)
         emergent_llm_key = os.environ.get("EMERGENT_LLM_KEY", "")
