@@ -132,8 +132,8 @@ class CustomerViewsTestCase(APITestCase):
         saved_customer = Customer.objects.get(full_name='Kabir Das')
         self.assertIsNotNone(saved_customer.custom_fields)
         
-        # Decode and inspect metadata dictionary
-        metadata = json.loads(saved_customer.custom_fields)
+        # Inspect metadata dictionary directly (JSONField returns deserialized objects)
+        metadata = saved_customer.custom_fields
         self.assertEqual(metadata['loanAmount'], '₹1,50,000')
         self.assertEqual(metadata['interestRate'], '12%')
         # Check standard fields were NOT bundled inside custom_fields

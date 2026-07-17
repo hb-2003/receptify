@@ -43,6 +43,19 @@ class TwilioTwiMLView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        account_sid = request.POST.get('AccountSid') or request.data.get('AccountSid')
+        if not account_sid:
+            return HttpResponseForbidden("Missing AccountSid parameter")
+
+        try:
+            credentials = TwilioCredentials.objects.get(account_sid=account_sid)
+            auth_token = decrypt(credentials.auth_token)
+        except Exception:
+            return HttpResponseForbidden("Missing or invalid credentials")
+
+        if not verify_twilio_signature(request, auth_token):
+            return HttpResponseForbidden("Invalid signature")
+
         twiml_content = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<Response>\n'

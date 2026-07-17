@@ -21,10 +21,27 @@ class TwilioTwiMLViewTests(TestCase):
     Verifies public access, XML content type, and TwiML structure.
     """
 
-    def test_twiml_endpoint_returns_static_xml_response(self):
+    def setUp(self):
+        self.business = Business.objects.create(
+            name="Test Business",
+            plan_tier="starter"
+        )
+        self.credentials = TwilioCredentials.objects.create(
+            business=self.business,
+            account_sid="ACmockaccountsid12345",
+            auth_token="Uiw0pU/fU8b+YpIsfB7k0U6Nn3Gf3ETo69/9xG9y:auth_tag:encrypted_val", # Encrypted
+            phone_number="+1234567890"
+        )
+
+    @patch("calls.views_twilio.decrypt")
+    @patch("calls.views_twilio.verify_twilio_signature")
+    def test_twiml_endpoint_returns_static_xml_response(self, mock_verify, mock_decrypt):
+        mock_decrypt.return_value = "mock_token_secret_value"
+        mock_verify.return_value = True
+
         url = reverse("twiml_endpoint")
-        # Send a POST request to the public endpoint (unauthenticated)
-        response = self.client.post(url)
+        # Send a POST request to the public endpoint with AccountSid
+        response = self.client.post(url, {"AccountSid": "ACmockaccountsid12345"})
 
         # Verify status code is 200 OK
         self.assertEqual(response.status_code, 200)

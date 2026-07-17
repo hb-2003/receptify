@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
+from receptify.models import Business, User
 from llm.views import build_fallback_script
 
 
@@ -57,6 +58,20 @@ class GenerateScriptViewTestCase(APITestCase):
 
     def setUp(self):
         self.url = reverse('generate_script_no_slash')
+        self.test_business = Business.objects.create(
+            name="Test Business",
+            plan_tier="growth"
+        )
+        self.test_user = User.objects.create(
+            email="test@clinic.in",
+            password_hash="SecurePasswordHash",
+            owner_name="Dr. Vikram",
+            phone="+919876543210",
+            role="owner",
+            is_email_verified=True,
+            business_id=self.test_business.id
+        )
+        self.client.force_authenticate(user=self.test_user)
 
     def test_missing_business_name_fails(self):
         payload = {

@@ -70,9 +70,10 @@ async def dial_customer(call, campaign, account_sid, auth_token, from_phone, sem
             # Trigger real HTTP POST call initiation request to Twilio API
             twilio_url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Calls.json"
             
-            # Construct base URLs pointing back to our own public endpoints
-            twiml_callback = f"https://receptify.in/api/calls/{call.id}/twiml"
-            status_callback = f"https://receptify.in/api/calls/{call.id}/status"
+            # Construct base URLs pointing back to our own public endpoints using dynamic environment domains
+            public_app_url = config('PUBLIC_APP_URL', default='https://api.receptify.in').rstrip('/')
+            twiml_callback = f"{public_app_url}/api/calls/{call.id}/twiml"
+            status_callback = f"{public_app_url}/api/calls/{call.id}/status"
             
             payload = {
                 "From": from_phone,

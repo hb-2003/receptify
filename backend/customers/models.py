@@ -15,7 +15,7 @@ class Customer(models.Model):
     customer_type = models.CharField(max_length=255, null=True, blank=True)
     due_date = models.DateField(null=True, blank=True)
     appointment_date = models.DateField(null=True, blank=True)
-    custom_fields = models.TextField(null=True, blank=True)
+    custom_fields = models.JSONField(default=dict, blank=True, null=True)
     consent_status = models.CharField(max_length=50, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

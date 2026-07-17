@@ -19,14 +19,18 @@ class CallSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Call
-        fields = '__all__'
+        fields = [
+            'id', 'status', 'outcome', 'notes', 'campaign', 'customer', 
+            'duration_sec', 'started_at', 'ended_at', 'attempt_number', 
+            'created_at', 'channel_type'
+        ]
 
 class CallTranscriptSerializer(serializers.ModelSerializer):
     class Meta:
         model = CallTranscript
-        fields = '__all__'
+        fields = ['id', 'text', 'summary', 'call', 'created_at']
 
 class CallRecordingSerializer(serializers.ModelSerializer):
     class Meta:
         model = CallRecording
-        fields = '__all__'
+        fields = ['id', 'call', 'audio_url', 'duration_sec', 'created_at']

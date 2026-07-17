@@ -4,7 +4,7 @@ import logging
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 
 log = logging.getLogger("receptify.llm")
 
@@ -57,8 +57,8 @@ def build_fallback_script(purpose, business_name, business_type=None, customer_t
 
 
 class GenerateScriptView(APIView):
-    # Support both public and authenticated generation requests
-    permission_classes = [AllowAny]
+    # Lock script generation view to authenticated dashboard users
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         purpose = request.data.get('purpose', 'custom').strip()

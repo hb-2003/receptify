@@ -117,7 +117,7 @@ class CustomerListCreateView(APIView):
             return Response({'error': 'Invalid Indian phone number'}, status=status.HTTP_400_BAD_REQUEST)
 
         tags_str = ','.join(tags) if isinstance(tags, list) else str(tags)
-        custom_fields_str = json.dumps(custom_fields) if isinstance(custom_fields, dict) else (str(custom_fields) if custom_fields else None)
+        custom_fields_dict = custom_fields if isinstance(custom_fields, dict) else {}
 
         try:
             customer = Customer.objects.create(
@@ -133,7 +133,7 @@ class CustomerListCreateView(APIView):
                 appointment_date=parse_date_string(appointment_date),
                 notes=notes if notes else None,
                 consent_status=consent_status,
-                custom_fields=custom_fields_str
+                custom_fields=custom_fields_dict
             )
 
             serializer = CustomerSerializer(customer)
@@ -191,7 +191,7 @@ class CustomerDetailView(APIView):
 
         if 'customFields' in request.data:
             cfields = request.data.get('customFields')
-            customer.custom_fields = json.dumps(cfields) if isinstance(cfields, dict) else (str(cfields) if cfields else None)
+            customer.custom_fields = cfields if isinstance(cfields, dict) else {}
 
         customer.save()
         serializer = CustomerSerializer(customer)
@@ -280,7 +280,7 @@ class CustomerUploadView(APIView):
                     if v_str and v_str != 'nan' and v_str != 'None':
                         extra_fields[k] = v_str
             
-            custom_fields_str = json.dumps(extra_fields) if extra_fields else None
+            custom_fields_dict = extra_fields if extra_fields else {}
 
             # Handle tag formatting matching Next.js logic
             tags = [customer_type] if customer_type else []
@@ -300,7 +300,7 @@ class CustomerUploadView(APIView):
                     due_date=parse_date_string(due_date),
                     appointment_date=parse_date_string(appointment_date),
                     consent_status='granted',
-                    custom_fields=custom_fields_str
+                    custom_fields=custom_fields_dict
                 )
             )
             existing_phones.add(phone)
