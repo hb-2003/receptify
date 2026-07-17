@@ -139,3 +139,100 @@ class CustomerViewsTestCase(APITestCase):
         # Check standard fields were NOT bundled inside custom_fields
         self.assertNotIn('fullName', metadata)
         self.assertNotIn('notes', metadata)
+
+    def test_custom_field_definition_creation(self):
+        from customers.models import CustomFieldDefinition
+        
+        definition = CustomFieldDefinition.objects.create(
+            business=self.test_business,
+            name='Preferred Room',
+            key='preferred_room',
+            field_type='TEXT',
+            is_required=False,
+            options=['Deluxe', 'Standard']
+        )
+        
+        self.assertEqual(definition.name, 'Preferred Room')
+        self.assertEqual(definition.key, 'preferred_room')
+        self.assertEqual(definition.field_type, 'TEXT')
+        self.assertFalse(definition.is_required)
+        self.assertEqual(definition.options, ['Deluxe', 'Standard'])
+
+    def test_dynamic_audience_compilation_and_preview(self):
+        # Create standard customers with different properties
+        Customer.objects.create(
+            business=self.test_business,
+            full_name="Aman Gupta",
+            phone="+919812345011",
+            city="Delhi",
+            customer_type="patient",
+            tags=["VIP", "Regular"],
+            custom_fields={"lead_score": "85", "policy_type": "Health"}
+        )
+        Customer.objects.create(
+            business=self.test_business,
+            full_name="Bhavesh Patel",
+            phone="+919812345012",
+            city="Mumbai",
+            customer_type="lead",
+            tags=["Regular"],
+            custom_fields={"lead_score": "45", "policy_type": "Life"}
+        )
+        Customer.objects.create(
+            business=self.test_business,
+            full_name="Chitra Sen",
+            phone="+919812345013",
+            city="Delhi",
+            customer_type="patient",
+            tags=["VIP"],
+            custom_fields={"lead_score": "95", "policy_type": "Health"}
+        )
+
+        # 1. Test City Filter
+        payload = {
+            "filterGroups": [
+                {
+                    "logic_operator": "AND",
+                    "rules": [
+                        {"field_name": "city", "operator": "EQUALS", "value": "Delhi"}
+                    ]
+                }
+            ]
+        }
+        response = self.client.post('/api/customers/audiences/preview', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 2)
+        names = [c['fullName'] for c in response.data['customers']]
+        self.assertIn("Aman Gupta", names)
+        self.assertIn("Chitra Sen", names)
+
+        # 2. Test Tags Filter (CONTAINS)
+        payload = {
+            "filterGroups": [
+                {
+                    "logic_operator": "AND",
+                    "rules": [
+                        {"field_name": "tags", "operator": "CONTAINS", "value": "VIP"}
+                    ]
+                }
+            ]
+        }
+        response = self.client.post('/api/customers/audiences/preview', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 2)
+
+        # 3. Test Custom JSONB Fields (greater than/equals)
+        payload = {
+            "filterGroups": [
+                {
+                    "logic_operator": "AND",
+                    "rules": [
+                        {"field_name": "custom_fields.lead_score", "operator": "GREATER_THAN", "value": "50"}
+                    ]
+                }
+            ]
+        }
+        response = self.client.post('/api/customers/audiences/preview', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 2)
+

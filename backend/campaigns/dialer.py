@@ -184,4 +184,4 @@ async def run_live_campaign_dialer_async(campaign_id: str):
 
     # Transition campaign status to completed once all queued calls have been processed
     campaign.status = 'completed'
-    await asyncio.to_thread(campaign.save)
+    await asyncio.to_thread(campaign.save, update_fields=['status'])

@@ -80,13 +80,13 @@ class CustomerListCreateView(APIView):
             )
 
         if tag:
-            queryset = queryset.filter(tags__icontains=tag)
+            queryset = queryset.filter(tags__contains=[tag])
 
         queryset = queryset.order_by('-created_at')[:500]
         
         serializer = CustomerSerializer(queryset, many=True)
         return Response({
-            'customers': [to_camel_case(c) for c in serializer.data],
+            'customers': [to_camel_case(customer) for customer in serializer.data],
             'total': len(serializer.data)
         }, status=status.HTTP_200_OK)
 
@@ -95,18 +95,18 @@ class CustomerListCreateView(APIView):
         if not user.business_id:
             return Response({'error': 'No business associated with user'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Parse request body (expected camelCase) Safely with null-coercion guards
-        full_name = (request.data.get('fullName') or '').strip()
-        raw_phone = (request.data.get('phone') or '').strip()
-        email = (request.data.get('email') or '').strip()
-        city = (request.data.get('city') or '').strip()
-        language = (request.data.get('language') or 'en').strip()
-        customer_type = (request.data.get('customerType') or '').strip()
+        # Parse request body (expected camelCase) Safely with null-coercion and type guards
+        full_name = str(request.data.get('fullName') or '').strip()
+        raw_phone = str(request.data.get('phone') or '').strip()
+        email = str(request.data.get('email') or '').strip()
+        city = str(request.data.get('city') or '').strip()
+        language = str(request.data.get('language') or 'en').strip()
+        customer_type = str(request.data.get('customerType') or '').strip()
         tags = request.data.get('tags') or []
         due_date = request.data.get('dueDate')
         appointment_date = request.data.get('appointmentDate')
-        notes = (request.data.get('notes') or '').strip()
-        consent_status = (request.data.get('consentStatus') or 'granted').strip()
+        notes = str(request.data.get('notes') or '').strip()
+        consent_status = str(request.data.get('consentStatus') or 'granted').strip()
         custom_fields = request.data.get('customFields')
 
         if not full_name or not raw_phone:
@@ -116,7 +116,13 @@ class CustomerListCreateView(APIView):
         if not is_valid_indian_phone(phone):
             return Response({'error': 'Invalid Indian phone number'}, status=status.HTTP_400_BAD_REQUEST)
 
-        tags_str = ','.join(tags) if isinstance(tags, list) else str(tags)
+        if isinstance(tags, str):
+            tags_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
+        elif isinstance(tags, list):
+            tags_list = [str(tag).strip() for tag in tags if str(tag).strip()]
+        else:
+            tags_list = []
+
         custom_fields_dict = custom_fields if isinstance(custom_fields, dict) else {}
 
         try:
@@ -128,7 +134,7 @@ class CustomerListCreateView(APIView):
                 city=city if city else None,
                 language=language if language in ['en', 'hi', 'gu'] else 'en',
                 customer_type=customer_type if customer_type else None,
-                tags=tags_str,
+                tags=tags_list,
                 due_date=parse_date_string(due_date),
                 appointment_date=parse_date_string(appointment_date),
                 notes=notes if notes else None,
@@ -138,8 +144,14 @@ class CustomerListCreateView(APIView):
 
             serializer = CustomerSerializer(customer)
             return Response({'customer': to_camel_case(serializer.data)}, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except ValidationError as validation_err:
+            return Response({'error': str(validation_err.message)}, status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError as integrity_err:
+            log.error(f"Database integrity error: {str(integrity_err)}")
+            return Response({'error': 'A database constraint violation occurred. Please check your input.'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exception:
+            log.exception(f"Unexpected customer creation failure: {str(exception)}")
+            return Response({'error': 'An unexpected server error occurred. Please try again later.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CustomerDetailView(APIView):
@@ -187,11 +199,19 @@ class CustomerDetailView(APIView):
 
         if 'tags' in request.data:
             tags = request.data.get('tags')
-            customer.tags = ','.join(tags) if isinstance(tags, list) else str(tags)
+            if isinstance(tags, str):
+                customer.tags = [tag.strip() for tag in tags.split(',') if tag.strip()]
+            elif isinstance(tags, list):
+                customer.tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+            else:
+                return Response({'error': 'tags must be a string or a list'}, status=status.HTTP_400_BAD_REQUEST)
 
         if 'customFields' in request.data:
             cfields = request.data.get('customFields')
-            customer.custom_fields = cfields if isinstance(cfields, dict) else {}
+            if isinstance(cfields, dict):
+                customer.custom_fields = cfields
+            else:
+                return Response({'error': 'customFields must be a dictionary object'}, status=status.HTTP_400_BAD_REQUEST)
 
         customer.save()
         serializer = CustomerSerializer(customer)
@@ -245,7 +265,7 @@ class CustomerUploadView(APIView):
         }
 
         for row in rows:
-            full_name = row.get('fullName', '').strip()
+            full_name = str(row.get('fullName') or '').strip()
             raw_phone = str(row.get('phone', '')).strip()
 
             if not full_name or not raw_phone:
@@ -280,11 +300,8 @@ class CustomerUploadView(APIView):
                     if v_str and v_str != 'nan' and v_str != 'None':
                         extra_fields[k] = v_str
             
-            custom_fields_dict = extra_fields if extra_fields else {}
-
             # Handle tag formatting matching Next.js logic
-            tags = [customer_type] if customer_type else []
-            tags_str = ','.join(tags)
+            tags_list = [customer_type] if customer_type else []
 
             customers_to_create.append(
                 Customer(
@@ -295,12 +312,12 @@ class CustomerUploadView(APIView):
                     city=city if city and city not in ['nan', 'None'] else None,
                     language=lang_clean,
                     customer_type=customer_type if customer_type and customer_type not in ['nan', 'None'] else None,
-                    tags=tags_str,
+                    tags=tags_list,
                     notes=notes if notes and notes not in ['nan', 'None'] else None,
                     due_date=parse_date_string(due_date),
                     appointment_date=parse_date_string(appointment_date),
                     consent_status='granted',
-                    custom_fields=custom_fields_dict
+                    custom_fields=extra_fields
                 )
             )
             existing_phones.add(phone)
@@ -323,13 +340,191 @@ class CustomerUploadView(APIView):
 # Helper to convert snake_case keys in dictionary to camelCase for the frontend
 def to_camel_case(data):
     if isinstance(data, list):
-        return [to_camel_case(i) for i in data]
+        return [to_camel_case(item) for item in data]
     elif isinstance(data, dict):
         new_dict = {}
-        for k, v in data.items():
-            parts = k.split('_')
+        for key, value in data.items():
+            parts = key.split('_')
             camel_key = parts[0] + ''.join(x.title() for x in parts[1:])
-            new_dict[camel_key] = to_camel_case(v)
+            if camel_key in ['customFields', 'options']:
+                # Retain raw user-defined custom metadata formats
+                new_dict[camel_key] = value
+            else:
+                new_dict[camel_key] = to_camel_case(value)
         return new_dict
     else:
         return data
+
+
+# Safe, dynamic query generation compiler translating filter rules to Django Q objects
+def compile_filters_to_q(filter_groups, business_id):
+    final_query = Q(business_id=business_id)
+    
+    if not filter_groups:
+        return final_query
+        
+    for group_data in filter_groups:
+        group_query = None
+        logic_operator = group_data.get('logic_operator', 'AND').upper() or group_data.get('logicOperator', 'AND').upper()
+        rules = group_data.get('rules', [])
+        
+        for rule in rules:
+            field_name = rule.get('field_name', '').strip() or rule.get('fieldName', '').strip()
+            operator = rule.get('operator', '').strip().upper()
+            value = rule.get('value')
+            if operator == 'IN' and isinstance(value, str):
+                value = [value]
+            
+            rule_q = Q()
+            
+            # --- core fields filters ---
+            if field_name == 'city':
+                if operator == 'EQUALS': rule_q = Q(city__iexact=value)
+                elif operator == 'NOT_EQUALS': rule_q = ~Q(city__iexact=value)
+                elif operator == 'IN': rule_q = Q(city__in=value)
+                elif operator == 'CONTAINS': rule_q = Q(city__icontains=value)
+                elif operator == 'STARTS_WITH': rule_q = Q(city__istartswith=value)
+                elif operator == 'ENDS_WITH': rule_q = Q(city__iendswith=value)
+                elif operator == 'IS_NULL': rule_q = Q(city__isnull=True)
+                elif operator == 'IS_NOT_NULL': rule_q = Q(city__isnull=False)
+                
+            elif field_name == 'customer_type' or field_name == 'customerType':
+                if operator == 'EQUALS': rule_q = Q(customer_type__iexact=value)
+                elif operator == 'NOT_EQUALS': rule_q = ~Q(customer_type__iexact=value)
+                elif operator == 'IN': rule_q = Q(customer_type__in=value)
+                elif operator == 'CONTAINS': rule_q = Q(customer_type__icontains=value)
+                elif operator == 'IS_NULL': rule_q = Q(customer_type__isnull=True)
+                elif operator == 'IS_NOT_NULL': rule_q = Q(customer_type__isnull=False)
+                
+            elif field_name == 'due_date' or field_name == 'dueDate':
+                if operator == 'EQUALS': rule_q = Q(due_date=value)
+                elif operator == 'GREATER_THAN': rule_q = Q(due_date__gt=value)
+                elif operator == 'LESS_THAN': rule_q = Q(due_date__lt=value)
+                elif operator == 'GREATER_THAN_EQUAL': rule_q = Q(due_date__gte=value)
+                elif operator == 'LESS_THAN_EQUAL': rule_q = Q(due_date__lte=value)
+                elif operator == 'BETWEEN' and isinstance(value, list) and len(value) == 2:
+                    rule_q = Q(due_date__range=(value[0], value[1]))
+                elif operator == 'IS_NULL': rule_q = Q(due_date__isnull=True)
+                elif operator == 'IS_NOT_NULL': rule_q = Q(due_date__isnull=False)
+                
+            elif field_name == 'appointment_date' or field_name == 'appointmentDate':
+                if operator == 'EQUALS': rule_q = Q(appointment_date=value)
+                elif operator == 'GREATER_THAN': rule_q = Q(appointment_date__gt=value)
+                elif operator == 'LESS_THAN': rule_q = Q(appointment_date__lt=value)
+                elif operator == 'GREATER_THAN_EQUAL': rule_q = Q(appointment_date__gte=value)
+                elif operator == 'LESS_THAN_EQUAL': rule_q = Q(appointment_date__lte=value)
+                elif operator == 'BETWEEN' and isinstance(value, list) and len(value) == 2:
+                    rule_q = Q(appointment_date__range=(value[0], value[1]))
+                elif operator == 'IS_NULL': rule_q = Q(appointment_date__isnull=True)
+                elif operator == 'IS_NOT_NULL': rule_q = Q(appointment_date__isnull=False)
+
+            elif field_name == 'tags':
+                if operator == 'EQUALS' or operator == 'CONTAINS':
+                    rule_q = Q(tags__contains=[value])
+                elif operator == 'NOT_EQUALS' or operator == 'NOT_CONTAINS':
+                    rule_q = ~Q(tags__contains=[value])
+                elif operator == 'IN' or operator == 'CONTAINS_ANY':
+                    if isinstance(value, list):
+                        rule_q = Q(tags__overlap=value)
+                    else:
+                        rule_q = Q(tags__contains=[value])
+                elif operator == 'CONTAINS_ALL':
+                    if isinstance(value, list):
+                        rule_q = Q(tags__contains=value)
+                    else:
+                        rule_q = Q(tags__contains=[value])
+                elif operator == 'IS_NULL':
+                    rule_q = Q(tags=[])
+                elif operator == 'IS_NOT_NULL':
+                    rule_q = ~Q(tags=[])
+
+            elif field_name == 'full_name' or field_name == 'fullName':
+                if operator == 'EQUALS': rule_q = Q(full_name__iexact=value)
+                elif operator == 'NOT_EQUALS': rule_q = ~Q(full_name__iexact=value)
+                elif operator == 'CONTAINS': rule_q = Q(full_name__icontains=value)
+                elif operator == 'STARTS_WITH': rule_q = Q(full_name__istartswith=value)
+
+            elif field_name == 'phone':
+                if operator == 'EQUALS': rule_q = Q(phone=value)
+                elif operator == 'CONTAINS': rule_q = Q(phone__contains=value)
+
+            elif field_name == 'email':
+                if operator == 'EQUALS': rule_q = Q(email__iexact=value)
+                elif operator == 'NOT_EQUALS': rule_q = ~Q(email__iexact=value)
+                elif operator == 'CONTAINS': rule_q = Q(email__icontains=value)
+                elif operator == 'IS_NULL': rule_q = Q(email__isnull=True)
+                elif operator == 'IS_NOT_NULL': rule_q = Q(email__isnull=False)
+
+            elif field_name == 'language':
+                if operator == 'EQUALS': rule_q = Q(language=value)
+                elif operator == 'IN': rule_q = Q(language__in=value)
+
+            elif field_name == 'consent_status' or field_name == 'consentStatus':
+                if operator == 'EQUALS': rule_q = Q(consent_status=value)
+
+            # --- dynamic custom jsonb fields filters ---
+            elif field_name.startswith('custom_fields.') or field_name.startswith('customFields.'):
+                parts = field_name.split('.')
+                if len(parts) >= 2 and parts[1].strip():
+                    json_key = parts[1].strip()
+                    lookup_path = f"custom_fields__{json_key}"
+                    
+                    if operator == 'EQUALS': rule_q = Q(**{lookup_path: value})
+                    elif operator == 'NOT_EQUALS': rule_q = ~Q(**{lookup_path: value}) | Q(**{f"{lookup_path}__isnull": True})
+                    elif operator == 'CONTAINS': rule_q = Q(**{f"{lookup_path}__icontains": value})
+                    elif operator == 'GREATER_THAN': rule_q = Q(**{f"{lookup_path}__gt": value})
+                    elif operator == 'LESS_THAN': rule_q = Q(**{f"{lookup_path}__lt": value})
+                    elif operator == 'GREATER_THAN_EQUAL': rule_q = Q(**{f"{lookup_path}__gte": value})
+                    elif operator == 'LESS_THAN_EQUAL': rule_q = Q(**{f"{lookup_path}__lte": value})
+                    elif operator == 'IS_NULL': rule_q = Q(**{f"{lookup_path}__isnull": True})
+                    elif operator == 'IS_NOT_NULL': rule_q = Q(**{f"{lookup_path}__isnull": False})
+                else:
+                    continue
+
+            # Append rule to group query
+            if group_query is None:
+                group_query = rule_q
+            else:
+                if logic_operator == 'OR':
+                    group_query |= rule_q
+                else:
+                    group_query &= rule_q
+                    
+        if group_query is not None:
+            final_query &= group_query
+        
+    return final_query
+
+
+class AudiencePreviewView(APIView):
+    """
+    Exposes dry-run query count previews for interactive CRM UI Rule-Builders.
+    Returns dynamic count matching criteria alongside a quick 10-contact sample.
+    """
+    def post(self, request):
+        user = request.user
+        if not user.business_id:
+            return Response({'count': 0, 'customers': []}, status=status.HTTP_200_OK)
+
+        filter_groups = request.data.get('filter_groups') or request.data.get('filterGroups', [])
+        
+        # Compile criteria to parameterized django query constraints
+        q_constraints = compile_filters_to_q(filter_groups, user.business_id)
+        
+        try:
+            # Perform query
+            queryset = Customer.objects.filter(q_constraints).order_by('full_name')
+            total_count = queryset.count()
+            
+            # Retain a quick preview of up to 10 matching clients for instant frontend visualization
+            preview_set = queryset[:10]
+            serializer = CustomerSerializer(preview_set, many=True)
+            
+            return Response({
+                'count': total_count,
+                'customers': [to_camel_case(customer) for customer in serializer.data]
+            }, status=status.HTTP_200_OK)
+        except Exception as exception:
+            return Response({
+                'error': f'Invalid filter constraints: {str(exception)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
