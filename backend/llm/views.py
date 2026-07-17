@@ -57,10 +57,54 @@ class GenerateScriptView(APIView):
         if not business_name:
             return Response({'error': 'business_name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1. Retrieve Emergent LLM Key if available
+        # 1. Check for Gemini API Key first
+        from decouple import config
+        gemini_api_key = os.environ.get("GEMINI_API_KEY", "") or config('GEMINI_API_KEY', default="")
+        if gemini_api_key:
+            import httpx
+            import json
+            try:
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+                prompt = (
+                    "You are an expert AI script writer for Indian small businesses generating professional customer calling scripts.\n"
+                    f"Generate a calling script with parameters:\n"
+                    f"- Purpose: {purpose}\n"
+                    f"- Business Name: {business_name}\n"
+                    f"- Business Type: {business_type}\n"
+                    f"- Language: {language}\n"
+                    f"- Tone: {tone}\n"
+                    f"- Call Goal: {call_goal}\n"
+                    f"- Call CTA: {cta}\n\n"
+                    "Since this is for Indian telecommunications (TRAI compliance), you MUST include a clear opt-out message at the end of the script "
+                    "(must contain keywords like 'opt-out' or 'press 9', e.g. 'To opt-out of future calls, please press 9').\n\n"
+                    "Return ONLY a raw JSON object with the exact keys: "
+                    '"opening", "main_message", "response_handling", "closing", "cta", "short_version", "polite_version", "professional_version", "full_script". '
+                    "Do not enclose it in any markdown backticks or triple backticks. The values should be strings."
+                )
+                
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "responseMimeType": "application/json"
+                    }
+                }
+                
+                with httpx.Client() as client:
+                    resp = client.post(gemini_url, json=payload, timeout=15.0)
+                    if resp.status_code == 200:
+                        resp_data = resp.json()
+                        text_response = resp_data['candidates'][0]['content']['parts'][0]['text']
+                        parsed_json = json.loads(text_response.strip())
+                        return Response(parsed_json, status=status.HTTP_200_OK)
+                    else:
+                        log.error(f"Gemini API returned status {resp.status_code}: {resp.text}")
+            except Exception as ex:
+                log.error(f"Gemini API generation failed: {str(ex)}")
+
+        # 2. Retrieve Emergent LLM Key if available (Claude fallback)
         emergent_llm_key = os.environ.get("EMERGENT_LLM_KEY", "")
 
-        # 2. Check if we should run LLM generation or return fallback script
+        # 3. Check if we should run LLM generation or return fallback script
         if not EMERGENT_INTEGRATIONS_AVAILABLE or not emergent_llm_key:
             # Fallback keeps local development and sandboxes completely functional
             log.warning("emergentintegrations unavailable or key missing — returning fallback script")
