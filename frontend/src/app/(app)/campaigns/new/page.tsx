@@ -156,13 +156,17 @@ export default function NewCampaignPage() {
           objection_handling: data.objection_handling,
           cta: data.cta,
           include_opt_out: true, // Default to true for TRAI compliance
+          dynamic_variables: ['[Customer Name]', '[Amount Due]', '[Due Date]', '[Appointment Date]']
         }),
       });
       const d = await res.json();
+      if (!res.ok) {
+        throw new Error(d.error || 'Failed to generate script');
+      }
       setData((prev) => ({ ...prev, scriptText: d.fullScript || d.full_script || `Hello [Customer Name], this is ${business?.name || 'our team'} calling regarding your appointment. Press 9 to opt-out.` }));
       toast.success('AI script generated successfully');
-    } catch {
-      toast.error('Failed to generate script');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate script');
     } finally {
       setIsGenerating(false);
     }

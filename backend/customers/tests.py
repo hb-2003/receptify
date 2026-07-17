@@ -110,7 +110,7 @@ class CustomerViewsTestCase(APITestCase):
         saved_customer = Customer.objects.get(full_name='Rajesh Patel')
         self.assertEqual(str(saved_customer.due_date), '2026-02-18')
         self.assertEqual(str(saved_customer.appointment_date), '2026-02-15')
-        self.assertEqual(saved_customer.language, 'hi') # Mapped to ISO key
+        self.assertEqual(saved_customer.language, 'en') # System-wide English-only default
 
     def test_csv_upload_aggregates_custom_fields_json(self):
         # Verifies that unmapped extra CSV columns are saved inside custom_fields JSON

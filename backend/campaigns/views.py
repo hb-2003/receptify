@@ -193,7 +193,6 @@ class CampaignLaunchView(APIView):
                 Call.objects.bulk_create(queued_calls)
 
             # Kick off the live background dialer thread immediately after committing the transaction
-            import threading
             from campaigns.dialer import run_live_campaign_dialer
             thread = threading.Thread(target=run_live_campaign_dialer, args=(campaign.id,), daemon=True)
             thread.start()
