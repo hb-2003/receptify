@@ -1,23 +1,22 @@
-import re
-import uuid
-import random
-import time
 import threading
+
 from django.db import transaction
 from django.db.models import F
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from campaigns.models import Campaign, CampaignCustomer, Template, Script
-from campaigns.serializers import CampaignSerializer, TemplateSerializer
+
+from receptify.models import TwilioCredentials, Business
+from receptify.utils import to_camel_case
 from customers.models import Customer
 from customers.serializers import CustomerSerializer
+from customers.helpers import compile_filters_to_q
 from calls.models import Call, CallTranscript, CallRecording
-from customers.views import to_camel_case
-
-
-from receptify.models import TwilioCredentials
+from calls.serializers import CallSerializer
+from campaigns.models import Campaign, CampaignCustomer, Template, Script, CampaignFilterGroup, CampaignFilterRule
+from campaigns.serializers import CampaignSerializer, TemplateSerializer
+from campaigns.dialer import run_live_campaign_dialer
 
 # NOTE: The mock calling simulator thread (run_mock_campaign) and its utilities (OUTCOMES,
 # pick_outcome, mock_transcript, mock_summary) have been completely removed for KAN-17.

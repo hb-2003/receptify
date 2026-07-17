@@ -8,6 +8,7 @@ from django.urls import reverse
 from unittest.mock import AsyncMock, patch, MagicMock
 from google.cloud import texttospeech
 from receptify.models import Business, User, TwilioCredentials
+from receptify.crypto import encrypt
 from campaigns.models import Campaign
 from customers.models import Customer
 from calls.models import Call, CallEvent
@@ -203,7 +204,6 @@ class TwilioOutboundCallerTestCase(TestCase):
         )
         
         # Create encrypted Twilio Credentials (GCM serialized token)
-        from receptify.crypto import encrypt
         encrypted_token = encrypt("mock_twilio_auth_token_secret_123")
         
         self.credentials = TwilioCredentials.objects.create(

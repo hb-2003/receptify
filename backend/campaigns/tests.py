@@ -1,9 +1,11 @@
 import uuid
+import time as real_time
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITransactionTestCase
 from receptify.models import Business, TwilioCredentials, User
+from receptify.crypto import encrypt
 from campaigns.models import Campaign, CampaignCustomer
 from customers.models import Customer
 from calls.models import Call, CallEvent
@@ -145,7 +147,6 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
     @patch('time.sleep', return_value=None)
     def test_launch_runs_dialer_and_completes_campaign(self, mock_sleep):
         # Set up Twilio credentials with properly encrypted auth token
-        from receptify.crypto import encrypt
         TwilioCredentials.objects.create(
             business=self.test_business,
             account_sid="AC_mock_twilio_account_sid_99999",
@@ -163,7 +164,6 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             
             # Since the background thread runs concurrently, we wait for it to complete
-            import time as real_time
             timeout = 2.0
             start_time = real_time.time()
             while real_time.time() - start_time < timeout:
@@ -186,7 +186,6 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
     @patch('time.sleep', return_value=None)
     def test_launch_defers_campaign_outside_trai_hours(self, mock_sleep):
         # Set up Twilio credentials with properly encrypted auth token
-        from receptify.crypto import encrypt
         TwilioCredentials.objects.create(
             business=self.test_business,
             account_sid="AC_mock_twilio_account_sid_99999",
@@ -204,7 +203,6 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             
             # Wait for thread execution to exit
-            import time as real_time
             real_time.sleep(0.2)
             
             # Campaign status should have stayed 'scheduled' (execution deferred)
@@ -219,7 +217,6 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
     @patch('time.sleep', return_value=None)
     def test_launch_scrubs_and_blocks_dnd_numbers(self, mock_sleep):
         # Set up Twilio credentials with properly encrypted auth token
-        from receptify.crypto import encrypt
         TwilioCredentials.objects.create(
             business=self.test_business,
             account_sid="AC_mock_twilio_account_sid_99999",
@@ -246,7 +243,6 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             
             # Wait for campaign status to be completed
-            import time as real_time
             timeout = 2.0
             start_time = real_time.time()
             while real_time.time() - start_time < timeout:
