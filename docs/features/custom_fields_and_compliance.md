@@ -10,7 +10,7 @@ Receptify allows businesses to dynamically define and manage custom customer att
 Standard CRMs limit customer profiles to static fields like Name, Email, and Phone. Receptify supports true flexibility through a dynamic **Schema Definition Model**. 
 
 ### How It Works
-- **Schema Definiton**: Business admins can create `CustomFieldDefinition` records. These define the custom properties expected for customer profiles.
+- **Schema Definition**: Business admins can create `CustomFieldDefinition` records. These define the custom properties expected for customer profiles.
 - **JSONB Aggregation**: Customer-specific custom data is saved natively inside a single PostgreSQL `JSONB` column (`custom_fields`).
 - **GIN Indexing**: All dynamic properties are indexed using Postgres `jsonb_path_ops` GIN indexing, making queries extremely fast even on millions of records.
 

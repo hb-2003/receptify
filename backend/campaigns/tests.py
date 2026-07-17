@@ -346,9 +346,11 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
 
         # 3. Launch the campaign
         launch_url = reverse('campaign_launch', kwargs={'id': campaign.id})
-        with patch('campaigns.dialer.is_trai_compliant_time', return_value=True):
+        with patch('campaigns.dialer.is_trai_compliant_time', return_value=True), \
+             patch('campaigns.dialer.run_live_campaign_dialer') as mock_dialer:
             launch_response = self.client.post(launch_url)
             self.assertEqual(launch_response.status_code, status.HTTP_200_OK)
+            mock_dialer.assert_called_once()
 
             # Re-fetch campaign
             campaign.refresh_from_db()

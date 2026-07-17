@@ -17,7 +17,7 @@ from calls.models import Call, CallTranscript, CallRecording
 from customers.views import to_camel_case
 
 
-from receptify.models import TwilioCredentials
+from receptify.models import TwilioCredentials, Business
 
 # NOTE: The mock calling simulator thread (run_mock_campaign) and its utilities (OUTCOMES,
 # pick_outcome, mock_transcript, mock_summary) have been completely removed for KAN-17.
@@ -187,7 +187,7 @@ class CampaignLaunchView(APIView):
                 if not TwilioCredentials.objects.filter(business_id=user.business_id).exists():
                     return Response({'error': 'No Twilio credentials configured for your business. Please set them up in settings first.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                # Identify target customer list (either via dynamic database filters or static mapping fallback)
+                # Identify target customer list (either via dynamic database filters or static mapping fallback with consent_status='granted' and business_id filter checks)
                 filter_groups = campaign.filter_groups.all()
                 if filter_groups.exists():
                     from customers.views import compile_filters_to_q
@@ -198,19 +198,26 @@ class CampaignLaunchView(APIView):
                             'rules': [{'field_name': rule.field_name, 'operator': rule.operator, 'value': rule.value} for rule in filter_group.rules.all()]
                         })
                     q_constraints = compile_filters_to_q(serial_groups, user.business_id)
-                    customer_ids_to_dial = list(Customer.objects.filter(q_constraints).values_list('id', flat=True))
+                    customer_ids_to_dial = list(Customer.objects.filter(q_constraints, consent_status='granted').values_list('id', flat=True))
                 else:
                     campaign_customers = CampaignCustomer.objects.filter(campaign_id=campaign.id)
-                    customer_ids_to_dial = list(campaign_customers.values_list('customer_id', flat=True))
+                    static_customer_ids = list(campaign_customers.values_list('customer_id', flat=True))
+                    customer_ids_to_dial = list(Customer.objects.filter(
+                        business_id=user.business_id,
+                        id__in=static_customer_ids,
+                        consent_status='granted'
+                    ).values_list('id', flat=True))
 
                 contacts_count = len(customer_ids_to_dial)
                 if contacts_count == 0:
                     return Response({'error': 'Cannot launch a campaign with no contacts. Please add customers or configure matching criteria first.'}, status=status.HTTP_400_BAD_REQUEST)
 
-                # Validate that the business has sufficient call credits
-                if not user.business or user.business.call_credits < contacts_count:
-                    available_credits = user.business.call_credits if user.business else 0
-                    return Response({'error': f'Insufficient call credits. You need at least {contacts_count} credits, but only have {available_credits} left.'}, status=status.HTTP_400_BAD_REQUEST)
+                # Lock and retrieve user's Business balance securely to prevent concurrent overdraws
+                business = Business.objects.select_for_update().get(id=user.business_id)
+
+                # Validate that the business has sufficient call credits using locked instance
+                if business.call_credits < contacts_count:
+                    return Response({'error': f'Insufficient call credits. You need at least {contacts_count} credits, but only have {business.call_credits} left.'}, status=status.HTTP_400_BAD_REQUEST)
 
                 # Set campaign status to scheduled and use Live Twilio channel type
                 campaign.status = 'scheduled'
@@ -222,7 +229,6 @@ class CampaignLaunchView(APIView):
                 campaign.save()
 
                 # Deduct calling credits atomically from the business balance
-                business = user.business
                 business.call_credits = F('call_credits') - contacts_count
                 business.save()
 

@@ -1,6 +1,6 @@
 # GEMINI.md — Development Handbook & Workflow
 
-This file defines the technical overview, operational commands, and the step-by-step development flow that Gemini must follow for every feature, bugfix, or refactoring task in this repository. Follow all sections rigorously.
+This file defines the technical overview, operational commands, and the step-by-step development flow that Gemini must follow for every feature, bug fix, or refactoring task in this repository. Follow all sections rigorously.
 
 ---
 
@@ -65,7 +65,7 @@ Receptify is an enterprise-grade calling assistant and CRM campaign platform tai
 - **Primary Keys**: Always use UUID fields (`id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)`).
 - **Timestamps**: Ensure models inherit `created_at` and `updated_at` datetime fields.
 - **Booleans**: Follow standard question prefixes (`is_`, `has_`, `needs_`, `should_`).
-- **Scoping**: All queries must enforce business partition constraints on `request.user.business_id`.
+- **Scoping**: All queries must enforce business partition constraints on `request.user.business_id`, ensuring business partitioning is strictly scoped within the execution context to keep metadata completely distinct.
 - **Response Format**: Convert snake_case output properties using `to_camel_case()` helper.
 
 ### Frontend Patterns (React/Next.js)
@@ -143,5 +143,5 @@ Commit
    ↓
 Create PR → dev branch
    ↓
-Wait for CodeRabbit comments → resolve → Merge
+Wait for CodeRabbit comments → resolve ➜ Get final PR approval ➜ Merge
 ```

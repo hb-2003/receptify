@@ -142,8 +142,14 @@ class CustomerListCreateView(APIView):
 
             serializer = CustomerSerializer(customer)
             return Response({'customer': to_camel_case(serializer.data)}, status=status.HTTP_201_CREATED)
+        except ValidationError as validation_err:
+            return Response({'error': str(validation_err.message)}, status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError as integrity_err:
+            log.error(f"Database integrity error: {str(integrity_err)}")
+            return Response({'error': 'A database constraint violation occurred. Please check your input.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exception:
-            return Response({'error': str(exception)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            log.exception(f"Unexpected customer creation failure: {str(exception)}")
+            return Response({'error': 'An unexpected server error occurred. Please try again later.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CustomerDetailView(APIView):
@@ -196,11 +202,14 @@ class CustomerDetailView(APIView):
             elif isinstance(tags, list):
                 customer.tags = [str(tag).strip() for tag in tags if str(tag).strip()]
             else:
-                customer.tags = []
+                return Response({'error': 'tags must be a string or a list'}, status=status.HTTP_400_BAD_REQUEST)
 
         if 'customFields' in request.data:
             cfields = request.data.get('customFields')
-            customer.custom_fields = cfields if isinstance(cfields, dict) else {}
+            if isinstance(cfields, dict):
+                customer.custom_fields = cfields
+            else:
+                return Response({'error': 'customFields must be a dictionary object'}, status=status.HTTP_400_BAD_REQUEST)
 
         customer.save()
         serializer = CustomerSerializer(customer)

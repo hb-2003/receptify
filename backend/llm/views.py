@@ -1,6 +1,9 @@
 import os
 import uuid
+import json
 import logging
+import httpx
+from decouple import config
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -58,11 +61,8 @@ class GenerateScriptView(APIView):
             return Response({'error': 'business_name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 1. Check for Gemini API Key first
-        from decouple import config
         gemini_api_key = os.environ.get("GEMINI_API_KEY", "") or config('GEMINI_API_KEY', default="")
         if gemini_api_key:
-            import httpx
-            import json
             try:
                 gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
                 prompt = (
@@ -99,10 +99,10 @@ class GenerateScriptView(APIView):
                     else:
                         log.error(f"Gemini API returned status {response.status_code}: {response.text}")
             except Exception as exception:
-                log.error(f"Gemini API generation failed: {str(exception)}")
+                log.exception("Gemini API generation failed")
 
         # 2. Retrieve Emergent LLM Key if available (Claude fallback)
-        emergent_llm_key = os.environ.get("EMERGENT_LLM_KEY", "")
+        emergent_llm_key = os.environ.get("EMERGENT_LLM_KEY", "") or config("EMERGENT_LLM_KEY", default="")
 
         # 3. Check if we should run LLM generation or return fallback script
         if not EMERGENT_INTEGRATIONS_AVAILABLE or not emergent_llm_key:

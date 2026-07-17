@@ -93,7 +93,7 @@ export default function NewCampaignPage() {
       id: 'group-1',
       logic_operator: 'AND',
       rules: [
-        { id: 'rule-1', field_name: 'city', operator: 'EQUALS', value: 'Mumbai' }
+        { id: 'rule-1', field_name: 'city', operator: 'EQUALS', value: '' }
       ]
     }
   ]);
@@ -107,7 +107,6 @@ export default function NewCampaignPage() {
   const [data, setData] = useState({
     name: '',
     purpose: '',
-    branch: '', // New field for Product/Branch
     customerIds: [] as string[],
     scriptText: '',
     language: 'en' as 'en', // Strictly locked to English
@@ -133,6 +132,7 @@ export default function NewCampaignPage() {
   
   const [showSampleData, setShowSampleData] = useState(false);
   const scriptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetch('/api/customers').then((r) => r.json()).then((d) => setCustomers(d.customers || []));
@@ -156,20 +156,36 @@ export default function NewCampaignPage() {
   }, [step]);
 
   const triggerPreviewFetch = async () => {
+    // Cancel any ongoing previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsFetchingPreview(true);
+
     try {
       const res = await fetch('/api/customers/audiences/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filterGroups })
+        body: JSON.stringify({ filterGroups }),
+        signal: controller.signal
       });
       const d = await res.json();
       setPreviewCount(d.count || 0);
       setPreviewCustomers(d.customers || []);
-    } catch {
-      console.error("Preview fetch failed");
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error("Preview fetch failed", err);
+        setPreviewCount(0);
+        setPreviewCustomers([]);
+      }
     } finally {
-      setIsFetchingPreview(false);
+      // Only finalize loading state if this is the current active request
+      if (abortControllerRef.current === controller) {
+        setIsFetchingPreview(false);
+      }
     }
   };
 
@@ -191,7 +207,15 @@ export default function NewCampaignPage() {
     if (step === 1) return !!data.purpose && !!data.name;
     if (step === 2) {
       if (audienceMode === 'static') return data.customerIds.length > 0;
-      return previewCount > 0; // Filter Rules must match at least 1 customer to proceed!
+      
+      // Filter Rules must match at least 1 customer and all rules must have a valid non-empty value (except for null check operators)
+      const allRulesValid = filterGroups.every((group) => 
+        group.rules.every((rule) => {
+          if (rule.operator === 'IS_NULL' || rule.operator === 'IS_NOT_NULL') return true;
+          return rule.value !== undefined && rule.value !== null && String(rule.value).trim() !== '';
+        })
+      );
+      return previewCount > 0 && allRulesValid;
     }
     if (step === 3) return data.scriptText.trim().length > 10;
     if (step === 5) {
@@ -388,8 +412,11 @@ export default function NewCampaignPage() {
     try {
       const payload: any = {
         ...data,
-        status: statusOverride,
+        complianceConfirmed: data.isComplianceConfirmed,
+        status: 'draft',
       };
+      
+      delete payload.isComplianceConfirmed;
       
       // If in Rules Mode, pass the filter groups instead of raw customer IDs
       if (audienceMode === 'rules') {
@@ -402,13 +429,34 @@ export default function NewCampaignPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        toast.success(statusOverride === 'draft' ? 'Campaign saved as Draft' : 'Campaign launched successfully!');
-        router.push('/campaigns');
-      } else {
+      
+      if (!res.ok) {
         const err = await res.json();
         toast.error(err.error || 'Failed to submit campaign');
+        return;
       }
+
+      const createdCampaignResponse = await res.json();
+      const campaignId = createdCampaignResponse.campaign.id;
+
+      if (statusOverride !== 'draft') {
+        const launchRes = await fetch(`/api/campaigns/${campaignId}/launch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!launchRes.ok) {
+          const launchErr = await launchRes.json();
+          toast.error(launchErr.error || 'Failed to launch campaign after creation.');
+          return;
+        }
+        
+        toast.success('Campaign launched successfully!');
+      } else {
+        toast.success('Campaign saved as Draft');
+      }
+      
+      router.push('/campaigns');
     } catch {
       toast.error('Network error submitting campaign');
     } finally {
@@ -534,16 +582,10 @@ export default function NewCampaignPage() {
         {step === 1 && (
           <div className="glass p-6 lg:p-8 space-y-5 bg-white border border-[#E7E4DC] rounded-3xl" data-testid="step-basics">
             <h2 className="text-xl font-bold text-brand-navy">Campaign basics</h2>
-            <p className="text-sm text-slate-500 mt-1">Configure your campaign name, purpose, and targeted business branch.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-              <div>
-                <label className="label-base">Campaign Name</label>
-                <input className="input-field" placeholder="e.g. Appointment Reminder - July Week 2" value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} />
-              </div>
-              <div>
-                <label className="label-base">Product / Branch Store</label>
-                <input className="input-field" placeholder="e.g. Main Clinic, Andheri Branch" value={data.branch} onChange={(e) => setData({ ...data, branch: e.target.value })} />
-              </div>
+            <p className="text-sm text-slate-500 mt-1">Configure your campaign name and purpose.</p>
+            <div className="mt-6">
+              <label className="label-base">Campaign Name</label>
+              <input className="input-field" placeholder="e.g. Appointment Reminder - July Week 2" value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} />
             </div>
 
             <div className="mt-6">
@@ -1093,7 +1135,6 @@ export default function NewCampaignPage() {
               <div className="space-y-4">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs sm:text-sm">
                   <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="font-bold text-slate-500">Campaign Name:</span> <span className="font-bold text-slate-800">{data.name}</span></div>
-                  <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="font-bold text-slate-500">Product / Branch:</span> <span className="font-bold text-slate-800">{data.branch || '—'}</span></div>
                   <div className="flex justify-between border-b border-slate-200/60 pb-2"><span className="font-bold text-slate-500">Purpose:</span> <span className="font-bold text-slate-800 uppercase text-xs tracking-wider">{data.purpose.replace('_', ' ')}</span></div>
                   <div className="flex justify-between border-b border-slate-200/60 pb-2">
                     <span className="font-bold text-slate-500">Audience:</span> 
