@@ -7,7 +7,7 @@ from decouple import config
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 
 log = logging.getLogger("receptify.llm")
 
@@ -58,35 +58,47 @@ def build_fallback_script(purpose, business_name, business_type=None, customer_t
 
 
 class GenerateScriptView(APIView):
-    # Support both public and authenticated generation requests
-    permission_classes = [AllowAny]
+    # Lock script generation view to authenticated dashboard users
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         purpose = request.data.get('purpose', 'custom').strip()
-        business_name = request.data.get('business_name', '').strip()
-        business_type = request.data.get('business_type', '').strip()
-        customer_type = request.data.get('customer_type', '').strip()
+        business_name = (request.data.get('businessName') or request.data.get('business_name', '')).strip()
+        business_type = (request.data.get('businessType') or request.data.get('business_type', '')).strip()
+        customer_type = (request.data.get('customerType') or request.data.get('customer_type', '')).strip()
         language = request.data.get('language', 'en').strip()
         tone = request.data.get('tone', 'professional').strip()
-        call_goal = request.data.get('call_goal', '').strip()
-        important_details = request.data.get('important_details', '').strip()
+        call_goal = (request.data.get('callGoal') or request.data.get('call_goal', '')).strip()
+        important_details = (request.data.get('importantDetails') or request.data.get('important_details', '')).strip()
         cta = request.data.get('cta', '').strip()
         
         # Capture the three new AI Script Generator input parameters
-        objection_handling = request.data.get('objection_handling', '').strip()
-        dynamic_variables = request.data.get('dynamic_variables', [])
-        include_opt_out = request.data.get('include_opt_out', False)
+        objection_handling = (request.data.get('objections') or request.data.get('objection_handling') or request.data.get('objectionHandling', '')).strip()
+        dynamic_variables = request.data.get('dynamicVariables') or request.data.get('dynamic_variables', [])
+        include_opt_out = request.data.get('includeOptOut') or request.data.get('include_opt_out', False)
 
         if not business_name:
-            return Response({'error': 'business_name is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Business name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 1. Check for Gemini API Key first
         gemini_api_key = os.environ.get("GEMINI_API_KEY", "") or config('GEMINI_API_KEY', default="")
         if gemini_api_key:
             try:
-                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+                gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_api_key}"
+                # Construct dynamic variable format requirements
+                dyn_vars_prompt = ""
+                if dynamic_variables:
+                    vars_list = []
+                    if "customer_name" in dynamic_variables: vars_list.append("[Customer Name]")
+                    if "amount_due" in dynamic_variables: vars_list.append("[Amount Due]")
+                    if "due_date" in dynamic_variables: vars_list.append("[Due Date]")
+                    if "appointment_date" in dynamic_variables: vars_list.append("[Appointment Date]")
+                    if vars_list:
+                        dyn_vars_prompt = f"You MUST use exactly these uppercase bracketed placeholder variable(s) where they naturally fit in the script segments: {', '.join(vars_list)}. Do NOT use curly braces, lower case brackets, or invent any other placeholder formats.\n"
+
                 prompt = (
                     "You are an expert AI script writer for Indian small businesses generating professional customer calling scripts.\n"
+                    "CRITICAL INSTRUCTION: The generated script MUST be extremely short, conversational, and direct to the point. Do not use long paragraphs or overly formal, verbose language.\n"
                     f"Generate a calling script with parameters:\n"
                     f"- Purpose: {purpose}\n"
                     f"- Business Name: {business_name}\n"
@@ -94,7 +106,9 @@ class GenerateScriptView(APIView):
                     f"- Language: {language}\n"
                     f"- Tone: {tone}\n"
                     f"- Call Goal: {call_goal}\n"
+                    f"- Handle Objections: {objection_handling}\n"
                     f"- Call CTA: {cta}\n\n"
+                    f"{dyn_vars_prompt}"
                     "Since this is for Indian telecommunications (TRAI compliance), you MUST include a clear opt-out message at the end of the script "
                     "(must contain keywords like 'opt-out' or 'press 9', e.g. 'To opt-out of future calls, please press 9').\n\n"
                     "Return ONLY a raw JSON object with the exact keys: "
@@ -110,10 +124,19 @@ class GenerateScriptView(APIView):
                 }
                 
                 with httpx.Client() as client:
-                    response = client.post(gemini_url, json=payload, timeout=15.0)
+                    response = client.post(gemini_url, json=payload, timeout=30.0)
                     if response.status_code == 200:
                         response_data = response.json()
-                        text_response = response_data['candidates'][0]['content']['parts'][0]['text']
+                        text_response = response_data['candidates'][0]['content']['parts'][0]['text'].strip()
+                        
+                        # Strip markdown backticks if Gemini includes them
+                        if text_response.startswith('```json'):
+                            text_response = text_response[7:]
+                        elif text_response.startswith('```'):
+                            text_response = text_response[3:]
+                        if text_response.endswith('```'):
+                            text_response = text_response[:-3]
+                            
                         parsed_json = json.loads(text_response.strip())
                         return Response(parsed_json, status=status.HTTP_200_OK)
                     else:
@@ -152,6 +175,7 @@ class GenerateScriptView(APIView):
                 session_id=session_id,
                 system_message=(
                     "You are an expert AI script writer for Indian small businesses generating professional customer calling scripts. "
+                    "CRITICAL INSTRUCTION: The generated script MUST be extremely short, conversational, and direct to the point. Do not use long paragraphs or overly formal, verbose language. "
                     "For TRAI compliance, you MUST include a clear, compliant opt-out option at the end of the script (such as 'To opt-out, please press 9'). "
                     "Return a JSON object containing keys: opening, main_message, response_handling, closing, cta, short_version, "
                     "polite_version, professional_version, full_script."
