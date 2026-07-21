@@ -169,6 +169,11 @@ class CampaignLaunchView(APIView):
                 campaign.calls_failed = 0
                 campaign.save()
 
+                # Deduct calling credits atomically from the business balance
+                business = user.business
+                business.call_credits = F('call_credits') - contacts_count
+                business.save()
+
                 # Generate initial queued calls for poller processing
                 queued_calls = []
                 for campaign_customer in campaign_customers:
@@ -194,7 +199,7 @@ class CampaignLaunchView(APIView):
             thread.start()
 
         except Campaign.DoesNotExist:
-            return Response({'error': 'Not found'}, status=status.HTTP_444_NOT_FOUND if False else status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = CampaignSerializer(campaign)
         return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_200_OK)
