@@ -3,6 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from llm.views import build_fallback_script
+from receptify.models import Business, User
 
 
 class FallbackScriptBuilderTestCase(TestCase):
@@ -51,11 +52,28 @@ class FallbackScriptBuilderTestCase(TestCase):
 
 
 class GenerateScriptViewTestCase(APITestCase):
-    """
-    Unit tests for the GenerateScriptView API endpoint.
-    """
+    # Tests for the GenerateScriptView API endpoint.
 
     def setUp(self):
+        self.test_business = Business.objects.create(
+            name="Test clinic",
+            business_type="Clinic",
+            city="Delhi",
+            preferred_language="en",
+            is_verified=True,
+            call_credits=500,
+            plan_tier="growth"
+        )
+        self.test_user = User.objects.create(
+            email="test@clinic.in",
+            password_hash="SecurePasswordHash",
+            owner_name="Dr. Vikram",
+            phone="+919876543210",
+            role="owner",
+            is_email_verified=True,
+            business_id=self.test_business.id
+        )
+        self.client.force_authenticate(user=self.test_user)
         self.url = reverse('generate_script_no_slash')
 
     def test_missing_business_name_fails(self):
@@ -65,7 +83,7 @@ class GenerateScriptViewTestCase(APITestCase):
         }
         response = self.client.post(self.url, data=payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("business_name is required", response.data["error"])
+        self.assertIn("Business name is required", response.data["error"])
 
     def test_successful_fallback_generation_flow(self):
         payload = {

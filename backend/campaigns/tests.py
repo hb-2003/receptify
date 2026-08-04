@@ -362,3 +362,78 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
             # Check that 1 credit was deducted from the business (500 -> 499)
             self.test_business.refresh_from_db()
             self.assertEqual(self.test_business.call_credits, 499)
+
+
+class CampaignDetailPatchTestCase(APITransactionTestCase):
+    # Tests for the PATCH endpoint and filterGroups in GET response on CampaignDetailView.
+
+    def setUp(self):
+        self.test_business = Business.objects.create(
+            name="Test clinic",
+            business_type="Clinic",
+            city="Delhi",
+            preferred_language="en",
+            is_verified=True,
+            call_credits=500,
+            plan_tier="growth"
+        )
+        self.test_user = User.objects.create(
+            email="test@clinic.in",
+            password_hash="SecurePasswordHash",
+            owner_name="Dr. Vikram",
+            phone="+919876543210",
+            role="owner",
+            is_email_verified=True,
+            business_id=self.test_business.id
+        )
+        self.client.force_authenticate(user=self.test_user)
+
+        self.draft_campaign = Campaign.objects.create(
+            business_id=self.test_business.id,
+            name="Draft Campaign",
+            purpose="payment_reminder",
+            language="en",
+            voice_type="female_professional",
+            script_text="Hello [Customer Name], payment overdue. Press 9 to opt-out.",
+            status="draft"
+        )
+
+    def test_patch_draft_campaign_updates_fields(self):
+        url = reverse('campaign_detail', kwargs={'id': self.draft_campaign.id})
+        response = self.client.patch(url, {
+            'name': 'Updated Campaign Name',
+            'voiceType': 'male_professional',
+            'scriptText': 'New script text with opt-out compliance.'
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['campaign']['name'], 'Updated Campaign Name')
+        self.assertEqual(response.data['campaign']['voiceType'], 'male_professional')
+
+        self.draft_campaign.refresh_from_db()
+        self.assertEqual(self.draft_campaign.name, 'Updated Campaign Name')
+        self.assertEqual(self.draft_campaign.voice_type, 'male_professional')
+
+    def test_patch_non_draft_campaign_rejected(self):
+        self.draft_campaign.status = 'scheduled'
+        self.draft_campaign.save()
+
+        url = reverse('campaign_detail', kwargs={'id': self.draft_campaign.id})
+        response = self.client.patch(url, {'name': 'Should Fail'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Only draft campaigns can be edited", response.data['error'])
+
+    def test_get_campaign_detail_returns_filter_groups(self):
+        from customers.models import Customer
+        customer = Customer.objects.create(
+            business_id=self.test_business.id,
+            full_name="Test Customer",
+            phone="+919812345001",
+            consent_status="granted"
+        )
+
+        url = reverse('campaign_detail', kwargs={'id': self.draft_campaign.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('filterGroups', response.data)
+        self.assertEqual(response.data['filterGroups'], [])

@@ -1,29 +1,25 @@
-import re
-import uuid
-import random
-import time
 import threading
 from django.db import transaction
 from django.db.models import F
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from campaigns.models import Campaign, CampaignCustomer, Template, Script, CampaignFilterGroup, CampaignFilterRule
+from campaigns.models import Campaign, CampaignCustomer, Template, CampaignFilterGroup, CampaignFilterRule
 from campaigns.serializers import CampaignSerializer, TemplateSerializer
 from customers.models import Customer
 from customers.serializers import CustomerSerializer
-from calls.models import Call, CallTranscript, CallRecording
-from customers.views import to_camel_case
-
+from calls.models import Call
 
 from receptify.models import TwilioCredentials, Business
+from receptify.utils import to_camel_case
+
 
 # NOTE: The mock calling simulator thread (run_mock_campaign) and its utilities (OUTCOMES,
 # pick_outcome, mock_transcript, mock_summary) have been completely removed for KAN-17.
 # We now transition campaigns to 'scheduled' status and queue them for live outbound dialer processing.
 
 
+# Handles listing all campaigns for the business and creating new ones with optional dynamic filter rules.
 class CampaignListCreateView(APIView):
     def get(self, request):
         user = request.user
@@ -113,6 +109,8 @@ class CampaignListCreateView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# Handles retrieving campaign details (with target customers, calls, and filter groups),
+# as well as patching draft campaign settings and deleting campaigns.
 class CampaignDetailView(APIView):
     def get(self, request, id):
         user = request.user
@@ -149,11 +147,89 @@ class CampaignDetailView(APIView):
         from calls.serializers import CallSerializer
         calls_serializer = CallSerializer(calls, many=True)
 
+        # Also return serialized filter groups so the frontend can display/edit the audience rules
+        filter_groups_data = []
+        for fg in filter_groups:
+            filter_groups_data.append({
+                'id': str(fg.id),
+                'logic_operator': fg.logic_operator,
+                'rules': [{
+                    'id': str(rule.id),
+                    'field_name': rule.field_name,
+                    'operator': rule.operator,
+                    'value': rule.value
+                } for rule in fg.rules.all()]
+            })
+
         return Response({
             'campaign': to_camel_case(campaign_serializer.data),
             'customers': [to_camel_case(customer_item) for customer_item in customer_serializer.data],
-            'calls': [to_camel_case(call_item) for call_item in calls_serializer.data]
+            'calls': [to_camel_case(call_item) for call_item in calls_serializer.data],
+            'filterGroups': to_camel_case(filter_groups_data)
         }, status=status.HTTP_200_OK)
+
+    def patch(self, request, id):
+        user = request.user
+        try:
+            campaign = Campaign.objects.get(id=id, business_id=user.business_id)
+        except Campaign.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Only allow editing campaigns that are still in draft status
+        if campaign.status != 'draft':
+            return Response({'error': 'Only draft campaigns can be edited'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Editable fields mapped from camelCase request keys to model attributes
+        editable_fields = {
+            'name': 'name',
+            'purpose': 'purpose',
+            'language': 'language',
+            'voiceType': 'voice_type',
+            'voice_type': 'voice_type',
+            'scriptText': 'script_text',
+            'script_text': 'script_text',
+            'scheduledAt': 'scheduled_at',
+            'scheduled_at': 'scheduled_at',
+            'callingWindowStart': 'calling_window_start',
+            'calling_window_start': 'calling_window_start',
+            'callingWindowEnd': 'calling_window_end',
+            'calling_window_end': 'calling_window_end',
+            'retryAttempts': 'retry_attempts',
+            'retry_attempts': 'retry_attempts',
+            'delayBetweenCalls': 'delay_between_calls',
+            'delay_between_calls': 'delay_between_calls',
+        }
+
+        for camel_key, snake_attr in editable_fields.items():
+            if camel_key in request.data:
+                val = request.data.get(camel_key)
+                if val != '' and val is not None:
+                    setattr(campaign, snake_attr, val)
+
+        if 'isComplianceConfirmed' in request.data or 'is_compliance_confirmed' in request.data:
+            campaign.is_compliance_confirmed = request.data.get('isComplianceConfirmed') or request.data.get('is_compliance_confirmed', False)
+
+        # Handle filter group updates: delete existing, recreate from new payload
+        if 'filterGroups' in request.data or 'filter_groups' in request.data:
+            filter_groups = request.data.get('filterGroups') or request.data.get('filter_groups')
+            if isinstance(filter_groups, list):
+                campaign.filter_groups.all().delete()
+                for group_data in filter_groups:
+                    filter_group = CampaignFilterGroup.objects.create(
+                        campaign=campaign,
+                        logic_operator=(group_data.get('logic_operator') or group_data.get('logicOperator') or 'AND')
+                    )
+                    for rule_data in (group_data.get('rules') or []):
+                        CampaignFilterRule.objects.create(
+                            group=filter_group,
+                            field_name=rule_data.get('field_name') or rule_data.get('fieldName'),
+                            operator=rule_data.get('operator'),
+                            value=rule_data.get('value')
+                        )
+
+        campaign.save()
+        serializer = CampaignSerializer(campaign)
+        return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_200_OK)
 
     def delete(self, request, id):
         user = request.user
@@ -165,6 +241,7 @@ class CampaignDetailView(APIView):
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
+# Launches a draft campaign: validates compliance, checks credits, queues calls, and spawns the dialer thread.
 class CampaignLaunchView(APIView):
     def post(self, request, id):
         user = request.user

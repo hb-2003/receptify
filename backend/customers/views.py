@@ -1,8 +1,8 @@
 import re
-import csv
-import json
+import logging
 from datetime import datetime
-from django.db import transaction
+from django.db import transaction, IntegrityError
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.db.models import Q
 from rest_framework.views import APIView
@@ -10,6 +10,9 @@ from rest_framework.response import Response
 from rest_framework import status
 from customers.models import Customer
 from customers.serializers import CustomerSerializer
+from receptify.utils import to_camel_case
+
+log = logging.getLogger(__name__)
 
 # Helpers for Indian Phone Formatting and Validation
 def format_phone(phone: str) -> str:
@@ -281,7 +284,6 @@ class CustomerUploadView(APIView):
 
             email = str(row.get('email') or '').strip()
             city = str(row.get('city') or '').strip()
-            language = str(row.get('language') or 'en').strip()
             customer_type = str(row.get('customerType') or '').strip()
             notes = str(row.get('notes') or '').strip()
             due_date = row.get('dueDate')
@@ -335,26 +337,8 @@ class CustomerUploadView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# Helper to convert snake_case keys in dictionary to camelCase for the frontend
-def to_camel_case(data):
-    if isinstance(data, list):
-        return [to_camel_case(item) for item in data]
-    elif isinstance(data, dict):
-        new_dict = {}
-        for key, value in data.items():
-            parts = key.split('_')
-            camel_key = parts[0] + ''.join(x.title() for x in parts[1:])
-            if camel_key in ['customFields', 'options']:
-                # Retain raw user-defined custom metadata formats
-                new_dict[camel_key] = value
-            else:
-                new_dict[camel_key] = to_camel_case(value)
-        return new_dict
-    else:
-        return data
-
-
-# Safe, dynamic query generation compiler translating filter rules to Django Q objects
+# Takes the filter rules built in the audience UI and turns them into a database query
+# that finds matching customers.
 def compile_filters_to_q(filter_groups, business_id):
     final_query = Q(business_id=business_id)
     
@@ -363,7 +347,7 @@ def compile_filters_to_q(filter_groups, business_id):
         
     for group_data in filter_groups:
         group_query = None
-        logic_operator = group_data.get('logic_operator', 'AND').upper() or group_data.get('logicOperator', 'AND').upper()
+        logic_operator = (group_data.get('logic_operator') or group_data.get('logicOperator') or 'AND').upper()
         rules = group_data.get('rules', [])
         
         for rule in rules:
@@ -478,6 +462,9 @@ def compile_filters_to_q(filter_groups, business_id):
                     elif operator == 'IS_NOT_NULL': rule_q = Q(**{f"{lookup_path}__isnull": False})
                 else:
                     continue
+            else:
+                # Unknown field name — no customer can match an unknown field, so match nothing
+                rule_q = Q(pk__in=[])
 
             # Append rule to group query
             if group_query is None:

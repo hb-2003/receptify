@@ -42,9 +42,13 @@ build/
 dist/
 
 # Environment Variables & Secrets
+# Environment Files (secrets)
 .env
 .env.*
 *.env
+# Allow .env.example and similar template files to be tracked
+!.env.example
+!.env.*.example
 credentials.json
 *.pem
 *.key

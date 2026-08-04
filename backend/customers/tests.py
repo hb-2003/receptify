@@ -236,3 +236,115 @@ class CustomerViewsTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 2)
 
+    def test_logic_operator_none_does_not_crash(self):
+        Customer.objects.create(
+            business=self.test_business,
+            full_name="Aman Gupta",
+            phone="+919812345011",
+            city="Delhi",
+            consent_status="granted"
+        )
+        Customer.objects.create(
+            business=self.test_business,
+            full_name="Bhavesh Patel",
+            phone="+919812345012",
+            city="Mumbai",
+            consent_status="granted"
+        )
+
+        payload = {
+            "filterGroups": [
+                {
+                    "logic_operator": None,
+                    "rules": [
+                        {"field_name": "city", "operator": "EQUALS", "value": "Delhi"}
+                    ]
+                }
+            ]
+        }
+        response = self.client.post('/api/customers/audiences/preview', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 1)
+
+    def test_logic_operator_camelcase_fallback(self):
+        Customer.objects.create(
+            business=self.test_business,
+            full_name="Aman Gupta",
+            phone="+919812345011",
+            city="Delhi",
+            consent_status="granted"
+        )
+
+        payload = {
+            "filterGroups": [
+                {
+                    "logicOperator": "OR",
+                    "rules": [
+                        {"field_name": "city", "operator": "EQUALS", "value": "Delhi"},
+                        {"field_name": "city", "operator": "EQUALS", "value": "Mumbai"}
+                    ]
+                }
+            ]
+        }
+        response = self.client.post('/api/customers/audiences/preview', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 1)
+
+    def test_unknown_field_name_does_not_match_all_customers(self):
+        Customer.objects.create(
+            business=self.test_business,
+            full_name="Aman Gupta",
+            phone="+919812345011",
+            city="Delhi",
+            consent_status="granted"
+        )
+        Customer.objects.create(
+            business=self.test_business,
+            full_name="Bhavesh Patel",
+            phone="+919812345012",
+            city="Mumbai",
+            consent_status="granted"
+        )
+
+        payload = {
+            "filterGroups": [
+                {
+                    "logic_operator": "AND",
+                    "rules": [
+                        {"field_name": "nonexistent_field", "operator": "EQUALS", "value": "x"}
+                    ]
+                }
+            ]
+        }
+        response = self.client.post('/api/customers/audiences/preview', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 0)
+
+    def test_custom_fields_not_double_encoded(self):
+        payload = {
+            'fullName': 'Test User',
+            'phone': '9812345001',
+            'customFields': {'lead_score': 85, 'source': 'referral'}
+        }
+        response = self.client.post('/api/customers', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        saved = Customer.objects.get(id=response.data['customer']['id'])
+        self.assertIsInstance(saved.custom_fields, dict)
+        self.assertEqual(saved.custom_fields['lead_score'], 85)
+        self.assertNotIsInstance(saved.custom_fields, str)
+
+    def test_validation_error_returns_clean_response(self):
+        Customer.objects.create(
+            business=self.test_business,
+            full_name="Existing User",
+            phone="+919812345001",
+            consent_status="granted"
+        )
+        payload = {
+            'fullName': 'Duplicate User',
+            'phone': '9812345001',
+        }
+        response = self.client.post('/api/customers', payload, format='json')
+        self.assertNotEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+

@@ -10,7 +10,7 @@ from customers.models import Customer
 from customers.serializers import CustomerSerializer
 from campaigns.models import Campaign
 from campaigns.serializers import CampaignSerializer
-from customers.views import to_camel_case
+from receptify.utils import to_camel_case
 
 logger = logging.getLogger("receptify.calls")
 

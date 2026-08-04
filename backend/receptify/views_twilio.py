@@ -1,10 +1,13 @@
 import base64
+import logging
 import httpx
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from receptify.models import TwilioCredentials
-from receptify.crypto import encrypt, decrypt
+from receptify.crypto import encrypt
+
+log = logging.getLogger(__name__)
 
 
 class TwilioCredentialsView(APIView):
@@ -51,13 +54,13 @@ class TwilioCredentialsView(APIView):
                 response = client.get(twilio_url, headers={'Authorization': authorization_header})
                 
                 if response.status_code != 200:
-                    print(f"Twilio validation error: {response.text}")
+                    log.warning(f"Twilio validation error: {response.text}")
                     return Response(
                         {'error': 'Failed to validate Twilio account credentials. Please check your Account SID and Auth Token.'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
         except Exception as e:
-            print(f"Network error validating with Twilio API: {str(e)}")
+            log.error(f"Network error validating with Twilio API: {str(e)}")
             return Response(
                 {'error': f'Could not connect to Twilio API for verification: {str(e)}'},
                 status=status.HTTP_502_BAD_GATEWAY

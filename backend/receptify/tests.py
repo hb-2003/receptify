@@ -5,6 +5,33 @@ from django.core import mail
 from rest_framework.test import APITestCase
 from rest_framework import status
 from receptify.models import User, Business, VerificationToken
+from receptify.utils import to_camel_case
+
+
+class ToCamelCaseTests(APITestCase):
+    # Tests for the shared to_camel_case utility moved to receptify/utils.py.
+
+    def test_simple_snake_case_to_camel(self):
+        result = to_camel_case({'first_name': 'John', 'last_name': 'Doe'})
+        self.assertEqual(result, {'firstName': 'John', 'lastName': 'Doe'})
+
+    def test_nested_dict_camel_case(self):
+        result = to_camel_case({'user_profile': {'phone_number': '+911234567890'}})
+        self.assertEqual(result, {'userProfile': {'phoneNumber': '+911234567890'}})
+
+    def test_list_of_dicts(self):
+        result = to_camel_case([{'created_at': '2026-01-01'}, {'created_at': '2026-01-02'}])
+        self.assertEqual(result, [{'createdAt': '2026-01-01'}, {'createdAt': '2026-01-02'}])
+
+    def test_custom_fields_not_recursed(self):
+        # customFields and options should be passed through without camelCase conversion
+        result = to_camel_case({'customFields': {'lead_score': 85}, 'options': {'color': 'blue'}})
+        self.assertEqual(result, {'customFields': {'lead_score': 85}, 'options': {'color': 'blue'}})
+
+    def test_primitive_passes_through(self):
+        self.assertEqual(to_camel_case('hello'), 'hello')
+        self.assertEqual(to_camel_case(42), 42)
+        self.assertIsNone(to_camel_case(None))
 
 class AuthVerificationTestCase(APITestCase):
     def setUp(self):

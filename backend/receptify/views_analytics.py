@@ -8,7 +8,7 @@ from campaigns.models import Campaign, Script
 from campaigns.serializers import CampaignSerializer
 from calls.models import Call
 from calls.serializers import CallSerializer
-from customers.views import to_camel_case
+from receptify.utils import to_camel_case
 
 
 class AnalyticsView(APIView):

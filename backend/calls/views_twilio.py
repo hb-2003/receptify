@@ -8,12 +8,18 @@ from receptify.models import TwilioCredentials
 from calls.models import Call, CallEvent
 from django.db.models import F
 
+# Maps campaign voice_type selections to Twilio Polly neural voice identifiers
+VOICE_MAP = {
+    'female_professional': 'Polly.Aditi',
+    'female_friendly': 'Polly.Kajal',
+    'male_professional': 'Polly.Amit',
+    'male_friendly': 'Polly.Amit',
+}
+
 
 def verify_twilio_signature(request, auth_token):
-    """
-    Validates Twilio webhook signatures using Twilio SDK RequestValidator.
-    Uses decrypted Auth Token as key and parses Nginx proxy headers.
-    """
+    # Validates Twilio webhook signatures using Twilio SDK RequestValidator.
+    # Uses decrypted Auth Token as key and parses Nginx proxy headers.
     signature = request.headers.get("X-Twilio-Signature")
     if not signature:
         return False
@@ -36,13 +42,24 @@ def verify_twilio_signature(request, auth_token):
 
 
 class TwilioTwiMLView(APIView):
-    """
-    Public webhook that Twilio calls when an outbound phone call is answered.
-    Responds with static TwiML (XML) instructing Twilio to Say a test message.
-    """
+    # Static test TwiML endpoint for manual testing outside of a campaign context.
+    # Requires a valid Twilio signature to prevent abuse.
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        business_id = request.query_params.get('businessId') or request.data.get('businessId')
+        if not business_id:
+            return HttpResponseForbidden("Missing businessId parameter")
+
+        try:
+            credentials = TwilioCredentials.objects.get(business_id=business_id)
+            auth_token = decrypt(credentials.auth_token)
+        except Exception:
+            return HttpResponseForbidden("Missing or invalid credentials")
+
+        if not verify_twilio_signature(request, auth_token):
+            return HttpResponseForbidden("Invalid signature")
+
         twiml_content = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<Response>\n'
@@ -53,11 +70,8 @@ class TwilioTwiMLView(APIView):
 
 
 class TwilioCallTwiMLView(APIView):
-    """
-    Public TwiML webhook specific to an active Call ID.
-    When a customer answers, this is invoked by Twilio.
-    Sets Call status to 'in_progress' and streams dynamic script instructions.
-    """
+    # When a customer answers the phone, Twilio hits this endpoint.
+    # We tell Twilio what to say by returning the campaign script as voice instructions.
     permission_classes = [AllowAny]
 
     def post(self, request, id, *args, **kwargs):
@@ -92,20 +106,21 @@ class TwilioCallTwiMLView(APIView):
         script_text = call.campaign.script_text or "Hello, this is a call from Receptify."
         escaped_script = escape(script_text)
 
+        # Map campaign voice_type to a Twilio Polly voice, falling back to alice
+        voice_id = VOICE_MAP.get(call.campaign.voice_type, 'alice')
+
         twiml_content = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<Response>\n'
-            f'    <Say voice="alice">{escaped_script}</Say>\n'
+            f'    <Say voice="{voice_id}">{escaped_script}</Say>\n'
             '</Response>'
         )
         return HttpResponse(twiml_content, content_type="application/xml")
 
 
 class TwilioCallStatusView(APIView):
-    """
-    Public webhook callback called by Twilio on call state transitions (ringing, completed, failed, etc.).
-    Updates database records with exact durations, outcomes, and logs historical CallEvents.
-    """
+    # Twilio sends us updates every time a call changes state (ringing, answered, hung up, failed).
+    # We record the duration and outcome here.
     permission_classes = [AllowAny]
 
     def post(self, request, id, *args, **kwargs):

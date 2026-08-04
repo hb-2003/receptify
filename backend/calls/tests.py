@@ -17,21 +17,55 @@ from calls.utils_twilio import initiate_twilio_call
 
 
 class TwilioTwiMLViewTests(TestCase):
-    """
-    Unit tests for the Twilio TwiML Webhook endpoint (KAN-21).
-    Verifies public access, XML content type, and TwiML structure.
-    """
+    # Tests for the static test TwiML endpoint with signature validation (KAN-21).
+    # Verifies that requests without valid businessId and signature are rejected.
 
-    def test_twiml_endpoint_returns_static_xml_response(self):
+    def setUp(self):
+        self.business = Business.objects.create(
+            name="Test Business",
+            plan_tier="starter"
+        )
+        self.credentials = TwilioCredentials.objects.create(
+            business=self.business,
+            account_sid="ACmockaccountsid12345",
+            auth_token="Uiw0pU/fU8b+YpIsfB7k0U6Nn3Gf3ETo69/9xG9y:auth_tag:encrypted_val",
+            phone_number="+1234567890"
+        )
+
+    def test_twiml_view_rejects_without_business_id(self):
         url = reverse("twiml_endpoint")
-        # Send a POST request to the public endpoint (unauthenticated)
         response = self.client.post(url)
+        self.assertEqual(response.status_code, 403)
 
-        # Verify status code is 200 OK
-        self.assertEqual(response.status_code, 200)
+    @patch("calls.views_twilio.decrypt")
+    def test_twiml_view_rejects_invalid_signature(self, mock_decrypt):
+        mock_decrypt.return_value = "mock_token_secret_value"
+        url = reverse("twiml_endpoint")
+        response = self.client.post(
+            f"{url}?businessId={self.business.id}",
+            HTTP_X_TWILIO_SIGNATURE="fake_invalid_sig_value"
+        )
+        self.assertEqual(response.status_code, 403)
 
-        # Verify response content type is application/xml
-        self.assertEqual(response["Content-Type"], "application/xml")
+    @patch("calls.views_twilio.decrypt")
+    def test_twiml_view_accepts_valid_signature(self, mock_decrypt):
+        mock_decrypt.return_value = "mock_token_secret_value"
+        url = reverse("twiml_endpoint")
+        full_url = f"http://testserver{url}?businessId={self.business.id}"
+        computed = hmac.new(
+            b"mock_token_secret_value", full_url.encode("utf-8"), hashlib.sha1
+        ).digest()
+        valid_signature = base64.b64encode(computed).decode("utf-8")
+
+        with override_settings(DEBUG=False):
+            response = self.client.post(
+                f"{url}?businessId={self.business.id}",
+                HTTP_X_TWILIO_SIGNATURE=valid_signature,
+                HTTP_X_FORWARDED_PROTO="http"
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Content-Type"], "application/xml")
+            self.assertIn("Hello, this is a test from Receptify", response.content.decode("utf-8"))
 
 
 class TwilioCallWebhookTests(TestCase):
@@ -158,6 +192,56 @@ class TwilioCallWebhookTests(TestCase):
             self.assertEqual(self.call.status, "completed")
             self.assertEqual(self.call.outcome, "completed")
             self.assertEqual(self.call.duration_sec, 45)
+
+    @patch("calls.views_twilio.decrypt")
+    def test_call_twiml_uses_voice_type_mapping(self, mock_decrypt):
+        # Verifies that the campaign's voice_type is mapped to the correct Twilio Polly voice
+        mock_decrypt.return_value = "mock_token_secret_value"
+
+        url = reverse("call_twiml", kwargs={"id": self.call.id})
+        full_url = f"http://testserver{url}"
+        computed = hmac.new(
+            b"mock_token_secret_value", full_url.encode("utf-8"), hashlib.sha1
+        ).digest()
+        valid_signature = base64.b64encode(computed).decode("utf-8")
+
+        with override_settings(DEBUG=False):
+            response = self.client.post(
+                url,
+                HTTP_X_TWILIO_SIGNATURE=valid_signature,
+                HTTP_X_FORWARDED_PROTO="http"
+            )
+            self.assertEqual(response.status_code, 200)
+            twiml = response.content.decode("utf-8")
+            # Default voice_type is 'female_professional' which maps to Polly.Aditi
+            self.assertIn("Polly.Aditi", twiml)
+
+    @patch("calls.views_twilio.decrypt")
+    def test_call_twiml_voice_type_male_professional(self, mock_decrypt):
+        # Verifies male_professional voice_type maps to Polly.Amit
+        mock_decrypt.return_value = "mock_token_secret_value"
+
+        # Update campaign to use male_professional voice
+        self.campaign.voice_type = "male_professional"
+        self.campaign.save()
+
+        url = reverse("call_twiml", kwargs={"id": self.call.id})
+        full_url = f"http://testserver{url}"
+        computed = hmac.new(
+            b"mock_token_secret_value", full_url.encode("utf-8"), hashlib.sha1
+        ).digest()
+        valid_signature = base64.b64encode(computed).decode("utf-8")
+
+        with override_settings(DEBUG=False):
+            response = self.client.post(
+                url,
+                HTTP_X_TWILIO_SIGNATURE=valid_signature,
+                HTTP_X_FORWARDED_PROTO="http"
+            )
+            self.assertEqual(response.status_code, 200)
+            twiml = response.content.decode("utf-8")
+            self.assertIn("Polly.Amit", twiml)
+            self.assertNotIn("alice", twiml)
 
 
 class TwilioOutboundCallerTestCase(TestCase):
