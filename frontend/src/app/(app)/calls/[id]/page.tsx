@@ -1,20 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, ComponentType } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Phone, User, Calendar, Clock, FileText, Mic, Sparkles } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { PURPOSE_LABEL, LANGUAGE_LABEL, formatDate, formatDuration } from '@/lib/utils';
+import { formatDate, formatDuration } from '@/lib/utils';
+import { CallDetailResponse } from '@/lib/types';
 
 export default function CallDetailPage() {
   const params = useParams();
   const id = params?.id as string;
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<CallDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/calls/${id}`).then((r) => r.json()).then((d) => { setData(d); setIsLoading(false); });
+    fetch(`/api/calls/${id}`).then((r) => r.json()).then((d: CallDetailResponse) => { setData(d); setIsLoading(false); });
   }, [id]);
 
   if (isLoading || !data?.call) return <div className="glass h-60 animate-pulse" />;
@@ -71,7 +72,7 @@ export default function CallDetailPage() {
   );
 }
 
-function Info({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+function Info({ icon: Icon, label, value }: { icon: ComponentType<{ className?: string }>; label: string; value: string }) {
   return (
     <div className="glass p-4 flex items-center gap-3">
       <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 grid place-items-center"><Icon className="w-4 h-4" /></div>

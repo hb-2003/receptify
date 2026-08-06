@@ -396,7 +396,7 @@ export default function ScriptGeneratorPage() {
             <div className="flex items-center justify-between p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/60 mt-2">
               <div>
                 <span className="text-xs font-bold text-slate-800 block">Include TRAI Compliance Wording</span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">Append 'Press 9 to opt-out' to closing</span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">Append &apos;Press 9 to opt-out&apos; to closing</span>
               </div>
               <input 
                 type="checkbox" 

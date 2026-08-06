@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Megaphone, Users, PhoneCall, BarChart3, Play, Pause } from 'lucide-react';
+import { ArrowLeft, Megaphone, Users, PhoneCall, BarChart3, Play, Pause, Copy, XCircle } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PURPOSE_LABEL, LANGUAGE_LABEL, formatDate, formatDuration } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -40,6 +40,39 @@ export default function CampaignDetailPage() {
     load();
   };
 
+  const handlePause = async () => {
+    const r = await fetch(`/api/campaigns/${id}/pause`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { toast.error(d.error || 'Failed to pause'); return; }
+    toast.success('Campaign paused');
+    load();
+  };
+
+  const handleResume = async () => {
+    const r = await fetch(`/api/campaigns/${id}/resume`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { toast.error(d.error || 'Failed to resume'); return; }
+    toast.success('Campaign resumed');
+    load();
+  };
+
+  const handleCancel = async () => {
+    if (!confirm('Are you sure you want to cancel this campaign? This cannot be undone.')) return;
+    const r = await fetch(`/api/campaigns/${id}/cancel`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { toast.error(d.error || 'Failed to cancel'); return; }
+    toast.success('Campaign canceled');
+    load();
+  };
+
+  const handleDuplicate = async () => {
+    const r = await fetch(`/api/campaigns/${id}/duplicate`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { toast.error(d.error || 'Failed to duplicate'); return; }
+    toast.success('Campaign duplicated');
+    router.push(`/campaigns/${d.campaign.id}`);
+  };
+
   if (isLoading || !data) return <div className="glass h-60 animate-pulse" />;
 
   const c = data.campaign;
@@ -57,9 +90,25 @@ export default function CampaignDetailPage() {
           </div>
           <div className="text-sm text-slate-500 mt-1">{PURPOSE_LABEL[c.purpose] || c.purpose} · {LANGUAGE_LABEL[c.language]} · Created {formatDate(c.createdAt)}</div>
         </div>
-        {c.status === 'draft' && (
-          <button onClick={launch} className="btn-primary text-sm" data-testid="campaign-launch-btn"><Play className="w-4 h-4" /> Launch campaign</button>
-        )}
+        <div className="flex items-center gap-2">
+          <button onClick={handleDuplicate} className="btn-secondary text-sm" data-testid="campaign-duplicate-btn"><Copy className="w-4 h-4" /> Duplicate</button>
+
+          {c.status === 'draft' && (
+            <button onClick={launch} className="btn-primary text-sm" data-testid="campaign-launch-btn"><Play className="w-4 h-4" /> Launch campaign</button>
+          )}
+
+          {c.status === 'running' && (
+            <button onClick={handlePause} className="px-4 py-2 bg-amber-100 text-amber-700 hover:bg-amber-200 rounded-xl text-sm font-bold transition-all flex items-center gap-2" data-testid="campaign-pause-btn"><Pause className="w-4 h-4" /> Pause</button>
+          )}
+
+          {c.status === 'paused' && (
+            <button onClick={handleResume} className="btn-primary text-sm" data-testid="campaign-resume-btn"><Play className="w-4 h-4" /> Resume</button>
+          )}
+
+          {['draft', 'scheduled', 'running', 'paused'].includes(c.status) && (
+            <button onClick={handleCancel} className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl text-sm font-bold transition-all flex items-center gap-2" data-testid="campaign-cancel-btn"><XCircle className="w-4 h-4" /> Cancel</button>
+          )}
+        </div>
       </header>
 
       {/* Progress */}

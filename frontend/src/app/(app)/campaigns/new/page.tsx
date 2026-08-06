@@ -311,25 +311,14 @@ export default function NewCampaignPage() {
     }
   };
 
-  const playVoiceActualScript = () => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      toast.error("Text-to-speech is not supported on this browser.");
-      return;
-    }
-
+  const playVoiceActualScript = async () => {
     if (!data.scriptText) {
       toast.error("Please write or generate a script first.");
       return;
     }
 
-    // Cancel any ongoing speech and resume to unstick Chrome's synthesis engine
-    window.speechSynthesis.cancel();
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-
     setIsPlayingActualVoiceSample(true);
-    toast.info("Synthesizing actual voice script sample...");
+    toast.info("Generating high-quality voice sample...");
 
     // Clean script text of template brackets so the voice synthesizer sounds natural
     const cleanText = data.scriptText
@@ -344,67 +333,53 @@ export default function NewCampaignPage() {
       .replace(/\{\{city\}\}/gi, "Mumbai")
       .replace(/\{\{[^}]+\}\}/g, "customer");
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-
-    // Determine language and locale
-    const lang = data.language || 'en';
-    let langLocale = 'en-IN';
-    if (lang === 'hi') langLocale = 'hi-IN';
-    else if (lang === 'gu') langLocale = 'gu-IN';
-
-    utterance.lang = langLocale;
-
-    // Retrieve available system voices
-    const voices = window.speechSynthesis.getVoices();
-    const isMale = data.voiceType ? data.voiceType.includes('male') : false;
-
-    // Search for a matching Indian accent or regional voice
-    const matchingVoice = voices.find(v => {
-      const nameLower = v.name.toLowerCase();
-      const matchesLocale = v.lang.replace('_', '-').toLowerCase() === langLocale.toLowerCase();
-      if (!matchesLocale) return false;
-
-      if (isMale) {
-        return nameLower.includes('male') || nameLower.includes('ravi') || nameLower.includes('david') || nameLower.includes('google hindi') || nameLower.includes('aman') || nameLower.includes('rishi');
-      } else {
-        return nameLower.includes('female') || nameLower.includes('heera') || nameLower.includes('zira') || nameLower.includes('google translation') || nameLower.includes('swara') || nameLower.includes('tara') || nameLower.includes('lekha');
+    try {
+      // If there's an ongoing playback, we could try to stop it. We'll store audio object on window.
+      if ((window as any)._currentAudioPreview) {
+        (window as any)._currentAudioPreview.pause();
       }
-    }) || voices.find(v => v.lang.toLowerCase().startsWith(lang.toLowerCase()));
 
-    if (matchingVoice) {
-      utterance.voice = matchingVoice;
-    }
+      const res = await fetch('/api/tts/preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scriptText: cleanText,
+          voiceType: data.voiceType || 'female_professional',
+        }),
+      });
 
-    // Configure voice style rate and pitch
-    if (data.voiceType && data.voiceType.includes('friendly')) {
-      utterance.rate = 1.0;
-      utterance.pitch = 1.15; // Slightly higher pitch for friendly tone
-    } else {
-      utterance.rate = 0.92; // Slightly measured pace for professional tone
-      utterance.pitch = 1.0;
-    }
+      if (!res.ok) {
+        throw new Error('Failed to generate preview audio');
+      }
 
-    utterance.onend = () => {
-      setIsPlayingActualVoiceSample(false);
-      toast.success("Voice sample playback finished successfully!");
-      // Clear global reference
-      delete (window as any)._currentUtterance;
-    };
+      const audioBlob = await res.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
 
-    utterance.onerror = (err) => {
-      if (err.error !== 'interrupted') {
-        console.error("SpeechSynthesis error:", err);
+      (window as any)._currentAudioPreview = audio;
+
+      audio.onended = () => {
         setIsPlayingActualVoiceSample(false);
-        toast.error("Voice synthesis playback failed.");
-        // Clear global reference
-        delete (window as any)._currentUtterance;
-      }
-    };
+        toast.success("Voice sample playback finished successfully!");
+        URL.revokeObjectURL(audioUrl);
+        delete (window as any)._currentAudioPreview;
+      };
 
-    // Store a global reference to prevent garbage collection in Chrome/Safari!
-    (window as any)._currentUtterance = utterance;
+      audio.onerror = () => {
+        setIsPlayingActualVoiceSample(false);
+        toast.error("Audio playback failed.");
+        URL.revokeObjectURL(audioUrl);
+        delete (window as any)._currentAudioPreview;
+      };
 
-    window.speechSynthesis.speak(utterance);
+      await audio.play();
+    } catch (error) {
+      console.error("TTS preview error:", error);
+      setIsPlayingActualVoiceSample(false);
+      toast.error("Failed to generate or play voice sample.");
+    }
   };
 
   const submit = async (statusOverride = 'scheduled') => {

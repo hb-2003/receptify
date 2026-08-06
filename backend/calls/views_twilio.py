@@ -6,7 +6,12 @@ from xml.sax.saxutils import escape
 from receptify.crypto import decrypt
 from receptify.models import TwilioCredentials
 from calls.models import Call, CallEvent
+from calls.tts_adapter import GoogleCloudTTSAdapter
 from django.db.models import F
+import asyncio
+import logging
+
+logger = logging.getLogger("receptify.calls.twilio")
 
 # Maps campaign voice_type selections to Twilio Polly neural voice identifiers
 VOICE_MAP = {
@@ -16,6 +21,13 @@ VOICE_MAP = {
     'male_friendly': 'Polly.Amit',
 }
 
+# Maps our frontend voice types to Google Cloud voice names
+GCP_VOICE_MAP = {
+    'female_professional': 'en-IN-Neural2-A',
+    'female_friendly': 'en-IN-Wavenet-A',
+    'male_professional': 'en-IN-Neural2-B',
+    'male_friendly': 'en-IN-Wavenet-B',
+}
 
 def verify_twilio_signature(request, auth_token):
     # Validates Twilio webhook signatures using Twilio SDK RequestValidator.
@@ -36,9 +48,28 @@ def verify_twilio_signature(request, auth_token):
         url = f"{proto}://{host}/{path_and_query}"
 
     # Twilio webhook requests utilize application/x-www-form-urlencoded, populated in request.POST
-    data = request.POST.dict()
+    # For GET requests (like fetching audio), use request.GET
+    data = request.POST.dict() if request.method == "POST" else request.GET.dict()
 
     return validator.validate(url, data, signature)
+
+def format_call_script(script_text: str, customer) -> str:
+    """Replaces variables in the script with actual customer data."""
+    if not script_text:
+        return "Hello, this is a call from Receptify."
+    if not customer:
+        return script_text
+
+    formatted = script_text.replace("{{fullName}}", customer.full_name or "customer")
+    formatted = formatted.replace("{{customerType}}", customer.customer_type or "")
+    formatted = formatted.replace("{{city}}", customer.city or "")
+
+    # Handle dynamic JSON fields if present
+    custom_fields = customer.custom_fields or {}
+    for key, value in custom_fields.items():
+        formatted = formatted.replace(f"{{{{{key}}}}}", str(value))
+
+    return formatted
 
 
 class TwilioTwiMLView(APIView):
@@ -102,19 +133,49 @@ class TwilioCallTwiMLView(APIView):
             payload=request.data
         )
 
-        # Retrieve dynamic script text and escape it to defend against XML injection
-        script_text = call.campaign.script_text or "Hello, this is a call from Receptify."
+        # Retrieve dynamic script text and format it with customer data
+        raw_script = call.campaign.script_text or "Hello, this is a call from Receptify."
+        script_text = format_call_script(raw_script, call.customer)
         escaped_script = escape(script_text)
 
-        # Map campaign voice_type to a Twilio Polly voice, falling back to alice
-        voice_id = VOICE_MAP.get(call.campaign.voice_type, 'alice')
+        # Check if we should use Google Cloud TTS or fallback to Twilio Polly
+        has_gcloud = False
+        try:
+            # If ADC (Application Default Credentials) are set, this won't throw
+            _ = GoogleCloudTTSAdapter()
+            has_gcloud = True
+        except Exception:
+            has_gcloud = False
 
-        twiml_content = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<Response>\n'
-            f'    <Say voice="{voice_id}">{escaped_script}</Say>\n'
-            '</Response>'
-        )
+        if has_gcloud:
+            # Use dynamic audio URL serving the GCP TTS output
+            audio_url = request.build_absolute_uri(f'/api/calls/{call.id}/audio')
+
+            # Twilio requires valid URL structure even for proxied URLs
+            proto = request.headers.get("X-Forwarded-Proto", "https")
+            host = request.headers.get("X-Forwarded-Host", request.get_host())
+            if "://" in audio_url:
+                parts = audio_url.split("://", 1)
+                path_and_query = parts[1].split("/", 1)[1] if "/" in parts[1] else ""
+                audio_url = f"{proto}://{host}/{path_and_query}"
+
+            twiml_content = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<Response>\n'
+                f'    <Play>{audio_url}</Play>\n'
+                '</Response>'
+            )
+        else:
+            # Map campaign voice_type to a Twilio Polly voice, falling back to alice
+            voice_id = VOICE_MAP.get(call.campaign.voice_type, 'alice')
+
+            twiml_content = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<Response>\n'
+                f'    <Say voice="{voice_id}">{escaped_script}</Say>\n'
+                '</Response>'
+            )
+
         return HttpResponse(twiml_content, content_type="application/xml")
 
 
@@ -204,3 +265,97 @@ class TwilioCallStatusView(APIView):
         )
 
         return JsonResponse({"success": True})
+
+
+class TwilioCallRecordingView(APIView):
+    # Twilio posts recording details to this webhook when recording completes.
+    permission_classes = [AllowAny]
+
+    def post(self, request, id, *args, **kwargs):
+        try:
+            call = Call.objects.get(id=id)
+        except Call.DoesNotExist:
+            return HttpResponse("Call not found", status=404)
+
+        # Validate signature if credentials exist
+        try:
+            credentials = TwilioCredentials.objects.get(business_id=call.campaign.business_id)
+            auth_token = decrypt(credentials.auth_token)
+            if not verify_twilio_signature(request, auth_token):
+                if not credentials.account_sid.startswith("AC_mock_") and credentials.account_sid != "mock_sid":
+                    return HttpResponseForbidden("Invalid signature")
+        except Exception:
+            pass
+
+        recording_url = request.data.get("RecordingUrl") or request.data.get("recordingUrl", "")
+        recording_sid = request.data.get("RecordingSid") or request.data.get("recordingSid", "")
+        duration = request.data.get("RecordingDuration") or request.data.get("recordingDuration", 0)
+
+        try:
+            duration_sec = int(duration)
+        except (ValueError, TypeError):
+            duration_sec = 0
+
+        from calls.models import CallRecording
+        recording, _ = CallRecording.objects.get_or_create(call=call)
+        recording.recording_sid = recording_sid
+        if recording_url:
+            recording.audio_url = recording_url
+        recording.duration_sec = duration_sec
+        recording.save()
+
+        CallEvent.objects.create(
+            call=call,
+            event_type="recording_completed",
+            payload=request.data
+        )
+
+        # Trigger async transcription and LLM summarization
+        import threading
+        from calls.stt_service import transcribe_and_summarize_call
+        thread = threading.Thread(target=transcribe_and_summarize_call, args=(str(call.id),), daemon=True)
+        thread.start()
+
+        return JsonResponse({"success": True})
+
+class CallAudioView(APIView):
+    # Twilio <Play> fetches the audio from this endpoint.
+    permission_classes = [AllowAny]
+
+    def get(self, request, id, *args, **kwargs):
+        try:
+            call = Call.objects.get(id=id)
+        except Call.DoesNotExist:
+            return HttpResponse("Call not found", status=404)
+
+        # Retrieve and decrypt credentials to validate signature, since Twilio hits this URL directly
+        try:
+            credentials = TwilioCredentials.objects.get(business_id=call.campaign.business_id)
+            auth_token = decrypt(credentials.auth_token)
+        except Exception:
+            return HttpResponseForbidden("Missing or invalid credentials")
+
+        if not verify_twilio_signature(request, auth_token):
+            return HttpResponseForbidden("Invalid signature")
+
+        # Format script
+        raw_script = call.campaign.script_text or "Hello, this is a call from Receptify."
+        script_text = format_call_script(raw_script, call.customer)
+        voice_name = GCP_VOICE_MAP.get(call.campaign.voice_type, 'en-IN-Neural2-A')
+
+        try:
+            adapter = GoogleCloudTTSAdapter()
+            audio_bytes = asyncio.run(self._get_all_bytes(adapter, script_text, voice_name, "MULAW"))
+        except Exception as e:
+            logger.error(f"Failed to generate GCloud TTS audio for call {call.id}: {e}")
+            return HttpResponse("Audio generation failed", status=500)
+
+        # Return MULAW audio with standard content type for Twilio
+        response = HttpResponse(audio_bytes, content_type="audio/basic")
+        return response
+
+    async def _get_all_bytes(self, adapter, text, voice_name, encoding):
+        chunks = []
+        async for chunk in adapter.generate_audio_stream(text, voice_name=voice_name, encoding=encoding):
+            chunks.append(chunk)
+        return b"".join(chunks)

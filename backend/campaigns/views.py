@@ -13,6 +13,8 @@ from calls.models import Call
 from receptify.models import TwilioCredentials, Business
 from receptify.utils import to_camel_case
 
+TERMINAL_STATUSES = ('completed', 'failed', 'canceled')
+
 
 # NOTE: The mock calling simulator thread (run_mock_campaign) and its utilities (OUTCOMES,
 # pick_outcome, mock_transcript, mock_summary) have been completely removed for KAN-17.
@@ -363,3 +365,135 @@ class TemplateListCreateView(APIView):
         )
         serializer = TemplateSerializer(template)
         return Response({'template': to_camel_case(serializer.data)}, status=status.HTTP_201_CREATED)
+
+
+class CampaignPauseView(APIView):
+    """Pause a running campaign."""
+    def post(self, request, id):
+        user = request.user
+        try:
+            campaign = Campaign.objects.get(id=id, business_id=user.business_id)
+        except Campaign.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if campaign.status != 'running':
+            return Response(
+                {'error': f'Cannot pause campaign in {campaign.status} status. Only running campaigns can be paused.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            campaign.status = 'paused'
+            campaign.save(update_fields=['status'])
+            Call.objects.filter(campaign_id=campaign.id, status='queued').update(status='paused')
+
+        serializer = CampaignSerializer(campaign)
+        return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_200_OK)
+
+
+class CampaignResumeView(APIView):
+    """Resume a paused campaign."""
+    def post(self, request, id):
+        user = request.user
+        try:
+            campaign = Campaign.objects.get(id=id, business_id=user.business_id)
+        except Campaign.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if campaign.status != 'paused':
+            return Response(
+                {'error': f'Cannot resume campaign in {campaign.status} status. Only paused campaigns can be resumed.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not TwilioCredentials.objects.filter(business_id=user.business_id).exists():
+            return Response(
+                {'error': 'No Twilio credentials configured. Please set them up in settings before resuming.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            campaign.status = 'scheduled'
+            campaign.save(update_fields=['status'])
+            Call.objects.filter(campaign_id=campaign.id, status='paused').update(status='queued')
+
+        from campaigns.dialer import run_live_campaign_dialer
+        thread = threading.Thread(target=run_live_campaign_dialer, args=(campaign.id,), daemon=True)
+        thread.start()
+
+        serializer = CampaignSerializer(campaign)
+        return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_200_OK)
+
+
+class CampaignCancelView(APIView):
+    """Cancel a draft, scheduled, running, or paused campaign."""
+    def post(self, request, id):
+        user = request.user
+        try:
+            campaign = Campaign.objects.get(id=id, business_id=user.business_id)
+        except Campaign.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if campaign.status in TERMINAL_STATUSES:
+            return Response(
+                {'error': f'Cannot cancel campaign in {campaign.status} status. It is already completed, failed, or canceled.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            campaign.status = 'canceled'
+            campaign.save(update_fields=['status'])
+            Call.objects.filter(
+                campaign_id=campaign.id
+            ).exclude(status__in=TERMINAL_STATUSES).update(status='canceled')
+
+        serializer = CampaignSerializer(campaign)
+        return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_200_OK)
+
+
+class CampaignDuplicateView(APIView):
+    """Duplicate a campaign as a new draft, copying config and filter groups."""
+    def post(self, request, id):
+        user = request.user
+        try:
+            campaign = Campaign.objects.get(id=id, business_id=user.business_id)
+        except Campaign.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            new_campaign = Campaign.objects.create(
+                business_id=campaign.business_id,
+                name=f"Copy of {campaign.name}",
+                purpose=campaign.purpose,
+                status='draft',
+                language=campaign.language,
+                voice_type=campaign.voice_type,
+                scheduled_at=None,
+                calling_window_start=campaign.calling_window_start,
+                calling_window_end=campaign.calling_window_end,
+                retry_attempts=campaign.retry_attempts,
+                delay_between_calls=campaign.delay_between_calls,
+                script_text=campaign.script_text,
+                is_compliance_confirmed=False,
+                total_contacts=0,
+                calls_completed=0,
+                calls_answered=0,
+                calls_failed=0,
+                channel_type=0,
+            )
+
+            for group in campaign.filter_groups.all():
+                new_group = CampaignFilterGroup.objects.create(
+                    campaign=new_campaign,
+                    logic_operator=group.logic_operator
+                )
+                for rule in group.rules.all():
+                    CampaignFilterRule.objects.create(
+                        group=new_group,
+                        field_name=rule.field_name,
+                        operator=rule.operator,
+                        value=rule.value
+                    )
+
+        serializer = CampaignSerializer(new_campaign)
+        return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_201_CREATED)

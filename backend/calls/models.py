@@ -5,6 +5,7 @@ from customers.models import Customer
 
 class Call(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    twilio_sid = models.CharField(max_length=100, null=True, blank=True)
     status = models.CharField(max_length=50, default='queued')
     outcome = models.CharField(max_length=50, default='pending')
     notes = models.TextField(null=True, blank=True)
@@ -14,6 +15,7 @@ class Call(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     attempt_number = models.IntegerField(default=0)
+    next_retry_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     channel_type = models.IntegerField(default=0)
 
@@ -35,6 +37,7 @@ class CallEvent(models.Model):
 class CallRecording(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     call = models.OneToOneField(Call, on_delete=models.CASCADE, db_column='call_id')
+    recording_sid = models.CharField(max_length=100, null=True, blank=True)
     audio_url = models.TextField(default='/audio/sample-recording.wav')
     duration_sec = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -418,3 +418,120 @@ class TTSAdapterTests(unittest.IsolatedAsyncioTestCase):
 
         full_audio = b"".join(chunks)
         self.assertEqual(full_audio, b"fake-mulaw-audio-bytes")
+
+
+class TwilioCallRecordingWebhookTests(TestCase):
+    def setUp(self):
+        self.business = Business.objects.create(name="Recording Business", plan_tier="starter")
+        self.credentials = TwilioCredentials.objects.create(
+            business=self.business,
+            account_sid="ACmockaccountsid12345",
+            auth_token="Uiw0pU/fU8b+YpIsfB7k0U6Nn3Gf3ETo69/9xG9y:auth_tag:encrypted_val",
+            phone_number="+1234567890"
+        )
+        self.campaign = Campaign.objects.create(
+            business=self.business,
+            name="Recording Campaign",
+            script_text="Hello, thank you for choosing Receptify.",
+            status="running"
+        )
+        self.customer = Customer.objects.create(
+            business=self.business,
+            full_name="Aarav Sharma",
+            phone="+919876543210"
+        )
+        self.call = Call.objects.create(
+            campaign=self.campaign,
+            customer=self.customer,
+            status="completed",
+            outcome="completed"
+        )
+
+    @patch("calls.stt_service.transcribe_and_summarize_call")
+    def test_call_recording_webhook_creates_recording_and_transcript(self, mock_transcribe):
+        url = reverse("call_recording", kwargs={"id": self.call.id})
+        payload = {
+            "RecordingUrl": "https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE12345.mp3",
+            "RecordingSid": "RE12345",
+            "RecordingDuration": "30"
+        }
+        response = self.client.post(url, data=payload)
+        self.assertEqual(response.status_code, 200)
+
+        from calls.models import CallRecording
+        recording = CallRecording.objects.get(call=self.call)
+        self.assertEqual(recording.recording_sid, "RE12345")
+        self.assertEqual(recording.audio_url, "https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE12345.mp3")
+        self.assertEqual(recording.duration_sec, 30)
+
+        # Verify async transcription was triggered
+        mock_transcribe.assert_called_once_with(str(self.call.id))
+
+    def test_transcribe_and_summarize_call_service(self):
+        from calls.models import CallRecording, CallTranscript
+        from calls.stt_service import transcribe_and_summarize_call
+
+        CallRecording.objects.create(
+            call=self.call,
+            recording_sid="RE12345",
+            audio_url="https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE12345.mp3",
+            duration_sec=30
+        )
+
+        transcribe_and_summarize_call(str(self.call.id))
+
+        transcript = CallTranscript.objects.get(call=self.call)
+        self.assertTrue(len(transcript.text) > 0)
+        self.assertIn("Aarav Sharma", transcript.summary)
+
+
+class TTSPreviewViewTests(TestCase):
+    def setUp(self):
+        self.business = Business.objects.create(name="TTS Business", plan_tier="starter")
+        self.user = User.objects.create(
+            email="ttsuser@example.com",
+            password_hash="hashedpass",
+            owner_name="TTS User",
+            business=self.business
+        )
+        self.client.force_login(self.user)
+
+    def test_tts_preview_requires_script_text(self):
+        url = reverse("tts_preview_no_slash")
+        response = self.client.post(url, data={}, content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.content, b"Missing scriptText")
+
+    @patch("calls.views_tts.GoogleCloudTTSAdapter")
+    def test_tts_preview_success(self, mock_gcp_adapter_cls):
+        mock_adapter = MagicMock()
+
+        async def dummy_gen(text, voice_name="en-IN-Neural2-A", encoding="MP3"):
+            yield b"fake_mp3_bytes"
+
+        mock_adapter.generate_audio_stream = dummy_gen
+        mock_gcp_adapter_cls.return_value = mock_adapter
+
+        url = reverse("tts_preview_no_slash")
+        payload = {
+            "scriptText": "Hello, this is a test script for preview.",
+            "voiceType": "female_friendly"
+        }
+        response = self.client.post(url, data=payload, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "audio/mpeg")
+        self.assertEqual(response.content, b"fake_mp3_bytes")
+
+    @patch("calls.views_tts.GoogleCloudTTSAdapter", side_effect=Exception("GCP disabled"))
+    def test_tts_preview_fallback_on_gcp_error(self, mock_gcp_adapter_cls):
+        url = reverse("tts_preview_no_slash")
+        payload = {
+            "scriptText": "Hello, this is a test script for fallback preview.",
+            "voiceType": "male_professional"
+        }
+        response = self.client.post(url, data=payload, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "audio/mpeg")
+        self.assertEqual(response.content, b"dummy_mp3_data")
+
+

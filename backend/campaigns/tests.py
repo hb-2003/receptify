@@ -1,18 +1,25 @@
-import uuid
 import time as real_time
+import threading
 from unittest.mock import patch
+from datetime import timedelta
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITransactionTestCase
 from receptify.models import Business, TwilioCredentials, User
 from receptify.crypto import encrypt
-from campaigns.models import Campaign, CampaignCustomer
+from campaigns.models import Campaign, CampaignCustomer, CampaignFilterGroup, CampaignFilterRule
 from customers.models import Customer
 from calls.models import Call, CallEvent
 
 # Tests the campaign launching and queueing validations for KAN-17
 class CampaignLaunchRoutingTestCase(APITransactionTestCase):
-    
+
+    def tearDown(self):
+        from django.db import connections
+        for conn in connections.all():
+            conn.close()
+
     def setUp(self):
         # Create a test business profile
         self.test_business = Business.objects.create(
@@ -304,7 +311,7 @@ class CampaignLaunchRoutingTestCase(APITransactionTestCase):
             city="Delhi",
             consent_status="granted"
         )
-        mumbai_customer = Customer.objects.create(
+        Customer.objects.create(
             business=self.test_business,
             full_name="Bhavesh Patel",
             phone="+919812345012",
@@ -425,7 +432,7 @@ class CampaignDetailPatchTestCase(APITransactionTestCase):
 
     def test_get_campaign_detail_returns_filter_groups(self):
         from customers.models import Customer
-        customer = Customer.objects.create(
+        Customer.objects.create(
             business_id=self.test_business.id,
             full_name="Test Customer",
             phone="+919812345001",
@@ -437,3 +444,454 @@ class CampaignDetailPatchTestCase(APITransactionTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('filterGroups', response.data)
         self.assertEqual(response.data['filterGroups'], [])
+
+
+class CampaignRetryTestCase(APITransactionTestCase):
+    """Tests for call retry logic with exponential backoff in the dialer."""
+
+    def tearDown(self):
+        from django.db import connections
+        for conn in connections.all():
+            conn.close()
+
+    def setUp(self):
+        self.test_business = Business.objects.create(
+            name="Test clinic",
+            business_type="Clinic",
+            city="Delhi",
+            preferred_language="en",
+            is_verified=True,
+            call_credits=500,
+            plan_tier="growth"
+        )
+        self.test_user = User.objects.create(
+            email="test@clinic.in",
+            password_hash="SecurePasswordHash",
+            owner_name="Dr. Vikram",
+            phone="+919876543210",
+            role="owner",
+            is_email_verified=True,
+            business_id=self.test_business.id
+        )
+        self.client.force_authenticate(user=self.test_user)
+
+        self.test_customer = Customer.objects.create(
+            business_id=self.test_business.id,
+            full_name="Rajesh Kumar",
+            phone="+919812345001",
+            consent_status="granted"
+        )
+
+        TwilioCredentials.objects.create(
+            business=self.test_business,
+            account_sid="AC_real_twilio_sid_88888",
+            auth_token=encrypt("raw_secret_twilio_auth_token"),
+            phone_number="+1234567890"
+        )
+
+        self.test_campaign = Campaign.objects.create(
+            business_id=self.test_business.id,
+            name="Retry Test Campaign",
+            purpose="payment_reminder",
+            retry_attempts=3,
+            delay_between_calls=5,
+            status="scheduled",
+            channel_type=1
+        )
+
+        self.test_call = Call.objects.create(
+            campaign=self.test_campaign,
+            customer=self.test_customer,
+            status="queued",
+            outcome="pending",
+            attempt_number=1,
+            channel_type=1
+        )
+
+    @patch('httpx.AsyncClient.post')
+    @patch('campaigns.dialer.is_trai_compliant_time', return_value=True)
+    @patch('campaigns.dialer.is_ndnc_blocked', return_value=False)
+    @patch('time.sleep', return_value=None)
+    def test_retryable_failure_schedules_retry(self, mock_sleep, mock_ndnc, mock_trai, mock_post):
+        """When Twilio returns a retryable status (503), the call should be scheduled for retry."""
+        mock_post.return_value = type('Response', (), {
+            'status_code': 503,
+            'text': 'Service Unavailable',
+            'json': lambda: {}
+        })()
+
+        from campaigns.dialer import run_live_campaign_dialer
+        thread = threading.Thread(target=run_live_campaign_dialer, args=(str(self.test_campaign.id),), daemon=True)
+        thread.start()
+        thread.join(timeout=5)
+
+        self.test_call.refresh_from_db()
+        # Call should still be queued (scheduled for retry)
+        self.assertEqual(self.test_call.status, 'queued')
+        self.assertIsNotNone(self.test_call.next_retry_at)
+
+    @patch('httpx.AsyncClient.post')
+    @patch('campaigns.dialer.is_trai_compliant_time', return_value=True)
+    @patch('campaigns.dialer.is_ndnc_blocked', return_value=False)
+    @patch('time.sleep', return_value=None)
+    def test_non_retryable_failure_marks_failed(self, mock_sleep, mock_ndnc, mock_trai, mock_post):
+        """When Twilio returns a non-retryable status (400), the call should be marked failed immediately."""
+        mock_post.return_value = type('Response', (), {
+            'status_code': 400,
+            'text': 'Bad Request',
+            'json': lambda: {}
+        })()
+
+        from campaigns.dialer import run_live_campaign_dialer
+        thread = threading.Thread(target=run_live_campaign_dialer, args=(str(self.test_campaign.id),), daemon=True)
+        thread.start()
+        thread.join(timeout=5)
+
+        self.test_call.refresh_from_db()
+        self.assertEqual(self.test_call.status, 'failed')
+        self.assertEqual(self.test_call.outcome, 'failed')
+
+    def test_exponential_backoff_calculation(self):
+        """Exponential backoff delay should double with each attempt, capped at 60 minutes."""
+        from campaigns.dialer import schedule_retry
+
+        attempts = [1, 2, 3, 4, 5]
+        expected_delays = [5, 10, 20, 40, 60]  # min(5 * 2^(n-1), 60)
+
+        for attempt, expected_delay in zip(attempts, expected_delays):
+            schedule_retry(self.test_call, self.test_campaign, attempt)
+            self.test_call.refresh_from_db()
+            self.assertIsNotNone(self.test_call.next_retry_at)
+            actual_delta = self.test_call.next_retry_at - timezone.now()
+            self.assertAlmostEqual(
+                actual_delta.total_seconds() / 60,
+                expected_delay,
+                delta=1.0
+            )
+
+    @patch('httpx.AsyncClient.post')
+    @patch('campaigns.dialer.is_trai_compliant_time', return_value=True)
+    @patch('campaigns.dialer.is_ndnc_blocked', return_value=False)
+    @patch('time.sleep', return_value=None)
+    def test_max_retries_auto_skip(self, mock_sleep, mock_ndnc, mock_trai, mock_post):
+        """After max retries, the call should be marked failed (auto-skip)."""
+        self.test_call.attempt_number = self.test_campaign.retry_attempts  # Already at max
+        self.test_call.save()
+
+        mock_post.return_value = type('Response', (), {
+            'status_code': 503,
+            'text': 'Service Unavailable',
+            'json': lambda: {}
+        })()
+
+        from campaigns.dialer import run_live_campaign_dialer
+        thread = threading.Thread(target=run_live_campaign_dialer, args=(str(self.test_campaign.id),), daemon=True)
+        thread.start()
+        thread.join(timeout=5)
+
+        self.test_call.refresh_from_db()
+        self.assertEqual(self.test_call.status, 'failed')
+        self.assertIn("retries", self.test_call.notes)
+
+
+class CampaignLifecycleTestCase(APITransactionTestCase):
+    """Tests for campaign pause, resume, cancel, and duplicate endpoints."""
+
+    def setUp(self):
+        self.test_business = Business.objects.create(
+            name="Test clinic",
+            business_type="Clinic",
+            city="Delhi",
+            preferred_language="en",
+            is_verified=True,
+            call_credits=500,
+            plan_tier="growth"
+        )
+        self.test_user = User.objects.create(
+            email="lifecycle@clinic.in",
+            password_hash="SecurePasswordHash",
+            owner_name="Dr. Sharma",
+            phone="+919876543210",
+            role="owner",
+            is_email_verified=True,
+            business_id=self.test_business.id
+        )
+        self.client.force_authenticate(user=self.test_user)
+
+        self.test_customer = Customer.objects.create(
+            business_id=self.test_business.id,
+            full_name="Lifecycle User",
+            phone="+919812345001",
+            consent_status="granted"
+        )
+
+        self.test_campaign = Campaign.objects.create(
+            business_id=self.test_business.id,
+            name="Lifecycle Test",
+            purpose="payment_reminder",
+            retry_attempts=2,
+            delay_between_calls=5,
+            status="running",
+            channel_type=1
+        )
+
+        self.queued_call = Call.objects.create(
+            campaign=self.test_campaign,
+            customer=self.test_customer,
+            status='queued',
+            channel_type=1,
+            attempt_number=1
+        )
+
+    def test_pause_running_campaign(self):
+        """Pause endpoint should transition a running campaign to paused."""
+        url = reverse('campaign_pause', kwargs={'id': self.test_campaign.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['campaign']['status'], 'paused')
+
+        self.test_campaign.refresh_from_db()
+        self.assertEqual(self.test_campaign.status, 'paused')
+
+    def test_pause_non_running_campaign_returns_400(self):
+        """Cannot pause a campaign that isn't running."""
+        self.test_campaign.status = 'draft'
+        self.test_campaign.save()
+
+        url = reverse('campaign_pause', kwargs={'id': self.test_campaign.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Only running campaigns can be paused", response.data['error'])
+
+    def test_pause_sets_queued_calls_to_paused(self):
+        """Pausing a running campaign should also pause queued calls."""
+        url = reverse('campaign_pause', kwargs={'id': self.test_campaign.id})
+        self.client.post(url)
+
+        self.queued_call.refresh_from_db()
+        self.assertEqual(self.queued_call.status, 'paused')
+
+    def test_resume_paused_campaign(self):
+        """Resume endpoint should transition a paused campaign back to scheduled."""
+        TwilioCredentials.objects.create(
+            business=self.test_business,
+            account_sid="AC_mock_twilio_account_sid_99999",
+            auth_token=encrypt("raw_secret_twilio_auth_token"),
+            phone_number="+1234567890"
+        )
+
+        self.test_campaign.status = 'paused'
+        self.test_campaign.save()
+        self.queued_call.status = 'paused'
+        self.queued_call.save()
+
+        url = reverse('campaign_resume', kwargs={'id': self.test_campaign.id})
+        with patch('threading.Thread') as _:
+            response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['campaign']['status'], 'scheduled')
+
+        self.test_campaign.refresh_from_db()
+        self.assertEqual(self.test_campaign.status, 'scheduled')
+
+        self.queued_call.refresh_from_db()
+        self.assertEqual(self.queued_call.status, 'queued')
+
+    def test_resume_non_paused_campaign_returns_400(self):
+        """Cannot resume a campaign that isn't paused."""
+        url = reverse('campaign_resume', kwargs={'id': self.test_campaign.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Only paused campaigns can be resumed", response.data['error'])
+
+    def test_cancel_running_campaign(self):
+        """Cancel endpoint should transition a running campaign to canceled."""
+        url = reverse('campaign_cancel', kwargs={'id': self.test_campaign.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['campaign']['status'], 'canceled')
+
+        self.test_campaign.refresh_from_db()
+        self.assertEqual(self.test_campaign.status, 'canceled')
+
+    def test_cancel_terminal_campaign_returns_400(self):
+        """Cannot cancel a campaign that is already in a terminal state."""
+        self.test_campaign.status = 'completed'
+        self.test_campaign.save()
+
+        url = reverse('campaign_cancel', kwargs={'id': self.test_campaign.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("already completed", response.data['error'])
+
+    def test_cancel_sets_active_calls_to_canceled(self):
+        """Canceling a campaign should set all active calls to canceled."""
+        url = reverse('campaign_cancel', kwargs={'id': self.test_campaign.id})
+        self.client.post(url)
+
+        self.queued_call.refresh_from_db()
+        self.assertEqual(self.queued_call.status, 'canceled')
+
+    def test_duplicate_campaign_creates_new_draft(self):
+        """Duplicate endpoint should create a new draft campaign."""
+        url = reverse('campaign_duplicate', kwargs={'id': self.test_campaign.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['campaign']['status'], 'draft')
+        self.assertIn("Copy of", response.data['campaign']['name'])
+
+        new_campaign = Campaign.objects.get(id=response.data['campaign']['id'])
+        self.assertNotEqual(new_campaign.id, self.test_campaign.id)
+        self.assertEqual(new_campaign.status, 'draft')
+        self.assertEqual(new_campaign.total_contacts, 0)
+        self.assertEqual(new_campaign.calls_completed, 0)
+
+    def test_duplicate_copies_filter_groups(self):
+        """Duplicate should copy filter groups and their rules."""
+        CampaignFilterGroup.objects.create(
+            campaign=self.test_campaign,
+            logic_operator='AND'
+        )
+        group = CampaignFilterGroup.objects.get(campaign=self.test_campaign)
+        CampaignFilterRule.objects.create(
+            group=group,
+            field_name='city',
+            operator='EQUALS',
+            value='Delhi'
+        )
+
+        url = reverse('campaign_duplicate', kwargs={'id': self.test_campaign.id})
+        response = self.client.post(url)
+
+        new_campaign = Campaign.objects.get(id=response.data['campaign']['id'])
+        new_groups = CampaignFilterGroup.objects.filter(campaign=new_campaign)
+        self.assertEqual(new_groups.count(), 1)
+        new_rules = CampaignFilterRule.objects.filter(group=new_groups.first())
+        self.assertEqual(new_rules.count(), 1)
+        self.assertEqual(new_rules.first().field_name, 'city')
+
+    def test_lifecycle_endpoints_return_404_for_nonexistent_campaign(self):
+        """All lifecycle endpoints should return 404 for nonexistent campaigns."""
+        fake_id = '00000000-0000-0000-0000-000000000000'
+        for endpoint_name in ['campaign_pause', 'campaign_resume', 'campaign_cancel', 'campaign_duplicate']:
+            url = reverse(endpoint_name, kwargs={'id': fake_id})
+            response = self.client.post(url)
+            self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND,
+                             f"{endpoint_name} did not return 404")
+
+
+class ScheduledLauncherTestCase(APITransactionTestCase):
+    """Tests for the scheduled campaign auto-launcher management command."""
+
+    def setUp(self):
+        self.test_business = Business.objects.create(
+            name="Test clinic",
+            business_type="Clinic",
+            city="Delhi",
+            preferred_language="en",
+            is_verified=True,
+            call_credits=500,
+            plan_tier="growth"
+        )
+        self.test_user = User.objects.create(
+            email="scheduler@clinic.in",
+            password_hash="SecurePasswordHash",
+            owner_name="Dr. Scheduler",
+            phone="+919876543210",
+            role="owner",
+            is_email_verified=True,
+            business_id=self.test_business.id
+        )
+        self.client.force_authenticate(user=self.test_user)
+
+        self.test_customer = Customer.objects.create(
+            business_id=self.test_business.id,
+            full_name="Scheduler User",
+            phone="+919812345001",
+            consent_status="granted"
+        )
+
+        TwilioCredentials.objects.create(
+            business=self.test_business,
+            account_sid="AC_mock_twilio_account_sid_99999",
+            auth_token=encrypt("raw_secret_twilio_auth_token"),
+            phone_number="+1234567890"
+        )
+
+    def test_scheduled_campaign_launches_when_due(self):
+        """A scheduled campaign with scheduled_at in the past should be launched."""
+        from io import StringIO
+        from django.core.management import call_command
+
+        campaign = Campaign.objects.create(
+            business_id=self.test_business.id,
+            name="Due Campaign",
+            purpose="payment_reminder",
+            status="scheduled",
+            scheduled_at=timezone.now() - timedelta(minutes=5),
+            channel_type=1
+        )
+        Call.objects.create(
+            campaign=campaign,
+            customer=self.test_customer,
+            status='queued',
+            channel_type=1,
+            attempt_number=1
+        )
+
+        with patch('campaigns.dialer.is_trai_compliant_time', return_value=True):
+            out = StringIO()
+            call_command('launch_scheduled', stdout=out)
+
+            self.assertIn("1 launched", out.getvalue())
+
+    def test_future_scheduled_campaign_not_launched(self):
+        """A scheduled campaign with scheduled_at in the future should NOT be launched."""
+        from io import StringIO
+        from django.core.management import call_command
+
+        campaign = Campaign.objects.create(
+            business_id=self.test_business.id,
+            name="Future Campaign",
+            purpose="payment_reminder",
+            status="scheduled",
+            scheduled_at=timezone.now() + timedelta(minutes=30),
+            channel_type=1
+        )
+
+        out = StringIO()
+        call_command('launch_scheduled', stdout=out)
+
+        self.assertIn("No scheduled campaigns ready to launch", out.getvalue())
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, 'scheduled')
+
+    def test_trailing_campaign_stays_scheduled_if_outside_trafi_window(self):
+        """A scheduled campaign outside TRAI window should be skipped, not launched."""
+        from io import StringIO
+        from django.core.management import call_command
+
+        campaign = Campaign.objects.create(
+            business_id=self.test_business.id,
+            name="Off-Hours Campaign",
+            purpose="payment_reminder",
+            status="scheduled",
+            scheduled_at=timezone.now() - timedelta(minutes=1),
+            channel_type=1
+        )
+
+        with patch('campaigns.dialer.is_trai_compliant_time', return_value=False):
+            out = StringIO()
+            call_command('launch_scheduled', stdout=out)
+
+            self.assertIn("0 launched", out.getvalue())
+
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, 'scheduled')

@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Megaphone, Plus, Trash2, Users, Calendar } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Megaphone, Plus, Trash2, Users, Calendar, Copy } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PURPOSE_LABEL, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function CampaignsPage() {
+  const router = useRouter();
   const [campaignList, setCampaignList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -25,6 +27,14 @@ export default function CampaignsPage() {
     await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
     toast.success('Deleted');
     load();
+  };
+
+  const handleDuplicate = async (id: string) => {
+    const r = await fetch(`/api/campaigns/${id}/duplicate`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { toast.error(d.error || 'Failed to duplicate'); return; }
+    toast.success('Campaign duplicated');
+    router.push(`/campaigns/${d.campaign.id}`);
   };
 
   return (
@@ -74,7 +84,10 @@ export default function CampaignsPage() {
 
               <div className="mt-5 flex items-center justify-between">
                 <Link href={`/campaigns/${c.id}`} className="text-brand-700 text-sm font-semibold hover:underline" data-testid={`campaign-view-${c.id}`}>View details →</Link>
-                <button onClick={() => handleDelete(c.id)} className="text-slate-400 hover:text-red-600 p-1" data-testid={`campaign-delete-${c.id}`}><Trash2 className="w-4 h-4" /></button>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => handleDuplicate(c.id)} className="text-slate-400 hover:text-brand-600 p-1" data-testid={`campaign-duplicate-${c.id}`} title="Duplicate"><Copy className="w-4 h-4" /></button>
+                  <button onClick={() => handleDelete(c.id)} className="text-slate-400 hover:text-red-600 p-1" data-testid={`campaign-delete-${c.id}`} title="Delete"><Trash2 className="w-4 h-4" /></button>
+                </div>
               </div>
             </div>
           ))}

@@ -11,6 +11,7 @@ from customers.views import CustomerListCreateView
 from campaigns.views import CampaignListCreateView, TemplateListCreateView
 from calls.views import CallListView
 from calls.views_twilio import TwilioTwiMLView
+from calls.views_tts import TTSPreviewView
 from llm.views import GenerateScriptView
 
 urlpatterns = [
@@ -45,6 +46,7 @@ urlpatterns = [
     # This aligns Django REST framework views with the exact Next.js client-side paths.
     path('api/templates', TemplateListCreateView.as_view(), name='templates_no_slash'),
     path('api/scripts/generate', GenerateScriptView.as_view(), name='generate_script_no_slash'),
+    path('api/tts/preview', TTSPreviewView.as_view(), name='tts_preview_no_slash'),
 
     # Modular App Endpoints
     path('api/customers/', include('customers.urls')),

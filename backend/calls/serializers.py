@@ -22,7 +22,7 @@ class CallSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'status', 'outcome', 'notes', 'campaign', 'customer',
             'duration_sec', 'started_at', 'ended_at', 'attempt_number',
-            'created_at', 'channel_type'
+            'next_retry_at', 'created_at', 'channel_type'
         ]
 
 class CallTranscriptSerializer(serializers.ModelSerializer):
