@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.throttling import ScopedRateThrottle
 from receptify.models import User, Business, VerificationToken
 
 # Helper to send emails leveraging Django's configured EMAIL_BACKEND
@@ -111,6 +112,8 @@ def set_auth_cookie(response, token):
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth'
 
     def post(self, request):
         email_raw = request.data.get('email', '') or ''
@@ -158,6 +161,8 @@ class LoginView(APIView):
 
 class SignupView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth'
 
     def post(self, request):
         email = (request.data.get('email') or '').strip().lower()

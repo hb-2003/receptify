@@ -325,14 +325,19 @@ Two separate regulatory frameworks apply, and both are mandatory before real cal
 
 ---
 
-## 13. Open Items / Next Steps
+## 13. Completed Platform Architecture Items & Next Steps
 
-- Detailed field-level spec for each of the 11 campaign creation steps
+### Completed Core Infrastructure & Features:
 - ~~Filter-object-to-SQL translation function~~ → **Implemented:** `compile_filters_to_q()` in `customers/views.py` with `CampaignFilterGroup`/`CampaignFilterRule` models
 - ~~Settings-page field list and credential validation flow~~ → **Implemented:** Settings page with Twilio credential entry, connection testing, and AES-GCM encrypted storage (`receptify/crypto.py`)
-- ~~Decision: require Twilio credentials before campaign creation, or only enforce at launch~~ → **Decided: enforce at launch.** Campaigns can be created without credentials; `CampaignLaunchView` checks for `TwilioCredentials` before proceeding.
+- ~~Enforce Twilio credentials before launch~~ → **Implemented:** Campaigns can be created as drafts; `CampaignLaunchView` verifies valid `TwilioCredentials` before initiating dialer threads.
+- ~~Twilio Account Phone Number Selection~~ → **Implemented:** `GET /api/v1/business/twilio/numbers` pulls live provisioned numbers from the tenant's Twilio account.
+- ~~Server-Side Voice & TTS Preview Pipeline~~ → **Implemented:** Google Cloud TTS adapter (`GoogleCloudTTSAdapter` & `MockFallbackAdapter`) with `POST /api/tts/preview` MP3 audio stream generation.
+- ~~Campaign Lifecycle & Retry Engine~~ → **Implemented:** Pause, resume, cancel, duplicate endpoints (`/pause`, `/resume`, `/cancel`, `/duplicate`) with attempt retries and status management.
+- ~~TRAI Telecom Compliance Enforcer~~ → **Implemented:** Restricts active campaign dialing to the mandatory 9 AM – 9 PM IST window (`is_within_calling_window()`).
+
+### Open Items & Future Roadmap:
 - Cost table and subscription pricing recalculated in INR against India-specific telephony rates (Sections 8–9 are currently USD/US-rate based and need an India-first pass)
 - Indian payment gateway (e.g., Razorpay/UPI) and GST-compliant invoicing for billing
 - DLT Principal Entity / Telemarketer registration process — first-hand walkthrough once started
-- One-time platform development cost/timeline estimate
 - Target vertical selection for initial customer validation

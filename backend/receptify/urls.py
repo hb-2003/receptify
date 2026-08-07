@@ -5,6 +5,7 @@ from receptify.views_auth import (
 )
 from receptify.views_analytics import AnalyticsView
 from receptify.views_twilio import TwilioCredentialsView
+from receptify.views_health import HealthCheckView
 
 # Import views from modular apps to support direct non-slashed routing
 from customers.views import CustomerListCreateView
@@ -28,6 +29,10 @@ urlpatterns = [
     
     # Analytics Endpoint
     path('api/analytics', AnalyticsView.as_view(), name='analytics'),
+
+    # Health Check Endpoint
+    path('api/health', HealthCheckView.as_view(), name='health_check'),
+    path('api/v1/health', HealthCheckView.as_view(), name='health_check_v1'),
     
     # Twilio Integration Endpoint
     path('api/v1/business/twilio', TwilioCredentialsView.as_view(), name='business_twilio'),

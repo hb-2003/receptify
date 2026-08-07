@@ -311,10 +311,8 @@ class TwilioCallRecordingView(APIView):
         )
 
         # Trigger async transcription and LLM summarization
-        import threading
-        from calls.stt_service import transcribe_and_summarize_call
-        thread = threading.Thread(target=transcribe_and_summarize_call, args=(str(call.id),), daemon=True)
-        thread.start()
+        from calls.tasks import dispatch_transcribe_and_summarize
+        dispatch_transcribe_and_summarize(str(call.id))
 
         return JsonResponse({"success": True})
 

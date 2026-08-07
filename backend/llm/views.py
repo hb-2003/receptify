@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 
 log = logging.getLogger("receptify.llm")
 
@@ -60,6 +61,8 @@ def build_fallback_script(purpose, business_name, business_type=None, customer_t
 class GenerateScriptView(APIView):
     # Lock script generation view to authenticated dashboard users
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'llm'
 
     def post(self, request):
         purpose = request.data.get('purpose', 'custom').strip()

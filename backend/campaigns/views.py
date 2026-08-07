@@ -329,10 +329,9 @@ class CampaignLaunchView(APIView):
                 # Bulk save call records atomically
                 Call.objects.bulk_create(queued_calls)
 
-            # Kick off the live background dialer thread immediately after committing the transaction
-            from campaigns.dialer import run_live_campaign_dialer
-            thread = threading.Thread(target=run_live_campaign_dialer, args=(campaign.id,), daemon=True)
-            thread.start()
+            # Kick off the campaign dialer task immediately after committing the transaction
+            from campaigns.tasks import dispatch_campaign_dialer
+            dispatch_campaign_dialer(str(campaign.id))
 
         except Campaign.DoesNotExist:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -417,9 +416,8 @@ class CampaignResumeView(APIView):
             campaign.save(update_fields=['status'])
             Call.objects.filter(campaign_id=campaign.id, status='paused').update(status='queued')
 
-        from campaigns.dialer import run_live_campaign_dialer
-        thread = threading.Thread(target=run_live_campaign_dialer, args=(campaign.id,), daemon=True)
-        thread.start()
+        from campaigns.tasks import dispatch_campaign_dialer
+        dispatch_campaign_dialer(str(campaign.id))
 
         serializer = CampaignSerializer(campaign)
         return Response({'campaign': to_camel_case(serializer.data)}, status=status.HTTP_200_OK)

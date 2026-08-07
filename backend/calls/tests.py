@@ -1,3 +1,4 @@
+import jwt
 import base64
 import hmac
 import hashlib
@@ -494,7 +495,12 @@ class TTSPreviewViewTests(TestCase):
             owner_name="TTS User",
             business=self.business
         )
-        self.client.force_login(self.user)
+        token = jwt.encode(
+            {"userId": str(self.user.id), "email": self.user.email},
+            "change_me",
+            algorithm="HS256"
+        )
+        self.client.cookies["receptify_token"] = token
 
     def test_tts_preview_requires_script_text(self):
         url = reverse("tts_preview_no_slash")
